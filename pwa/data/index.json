@@ -1,0 +1,86 @@
+[
+  {
+    "code": "159562",
+    "name": "黄金股ETF",
+    "type": "etf",
+    "file": "159562.json",
+    "count": 500
+  },
+  {
+    "code": "159819",
+    "name": "人工智能ETF",
+    "type": "etf",
+    "file": "159819.json",
+    "count": 500
+  },
+  {
+    "code": "512000",
+    "name": "证券ETF",
+    "type": "etf",
+    "file": "512000.json",
+    "count": 500
+  },
+  {
+    "code": "300308.SZ",
+    "name": "中际旭创",
+    "type": "stock",
+    "file": "300308_SZ.json",
+    "count": 500
+  },
+  {
+    "code": "601899.SH",
+    "name": "紫金矿业",
+    "type": "stock",
+    "file": "601899_SH.json",
+    "count": 500
+  },
+  {
+    "code": "002594.SZ",
+    "name": "比亚迪",
+    "type": "stock",
+    "file": "002594_SZ.json",
+    "count": 500
+  },
+  {
+    "code": "600519.SH",
+    "name": "贵州茅台",
+    "type": "stock",
+    "file": "600519_SH.json",
+    "count": 500
+  },
+  {
+    "code": "000651.SZ",
+    "name": "格力电器",
+    "type": "stock",
+    "file": "000651_SZ.json",
+    "count": 500
+  },
+  {
+    "code": "688981.SH",
+    "name": "中芯国际",
+    "type": "stock",
+    "file": "688981_SH.json",
+    "count": 500
+  },
+  {
+    "code": "601318.SH",
+    "name": "中国平安",
+    "type": "stock",
+    "file": "601318_SH.json",
+    "count": 500
+  },
+  {
+    "code": "603986.SH",
+    "name": "兆易创新",
+    "type": "stock",
+    "file": "603986_SH.json",
+    "count": 500
+  },
+  {
+    "code": "600436.SH",
+    "name": "片仔癀",
+    "type": "stock",
+    "file": "600436_SH.json",
+    "count": 500
+  }
+]

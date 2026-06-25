@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="趋势助手">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#007AFF">
+  <title>趋势交易助手</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <script src="js/echarts.min.js"></script>
+</head>
+<body>
+  <!-- 顶部导航栏 -->
+  <div class="nav-bar">
+    <button class="back-btn" id="backBtn" style="display:none;">
+      <span>‹</span> 返回
+    </button>
+    <div class="nav-title" id="navTitle">趋势交易助手</div>
+    <div class="nav-right" id="navRight">
+      <button class="nav-btn" id="refreshBtn" title="刷新数据">↻</button>
+    </div>
+  </div>
+
+  <!-- 首页 -->
+  <div class="page active" id="homePage">
+    <div class="overview-card">
+      <div class="overview-label">策略信号概览</div>
+      <div class="overview-value" id="overviewValue">--</div>
+      <div class="overview-stats">
+        <div class="overview-stat">
+          <div class="overview-stat-value" id="overviewBuy">--</div>
+          <div class="overview-stat-label">买入信号</div>
+        </div>
+        <div class="overview-stat">
+          <div class="overview-stat-value" id="overviewWatch">--</div>
+          <div class="overview-stat-label">观察中</div>
+        </div>
+        <div class="overview-stat">
+          <div class="overview-stat-value" id="overviewSell">--</div>
+          <div class="overview-stat-label">观望</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 搜索添加 -->
+    <div class="search-section">
+      <div class="search-box">
+        <input type="text" class="search-input" id="searchInput" placeholder="输入股票/ETF代码，如 512000 或 600519" maxlength="10">
+        <button class="search-btn" id="searchBtn">添加</button>
+      </div>
+      <div class="search-tips">
+        💡 支持A股（6位代码）和ETF，自动下载历史数据并回测
+      </div>
+      <div id="searchResult" style="display:none; margin-top: 12px;"></div>
+    </div>
+
+    <div class="stats-grid" id="statsGrid" style="display:none;">
+      <div class="stat-card">
+        <div class="stat-value success">0</div>
+        <div class="stat-label">买入</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value warning">0</div>
+        <div class="stat-label">观察</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value danger">0</div>
+        <div class="stat-label">观望</div>
+      </div>
+    </div>
+
+    <div class="group-header">
+      <span class="group-title">自选 <span id="watchlistCount">（0只）</span></span>
+      <span class="group-action" id="manageBtn">管理</span>
+    </div>
+
+    <div class="loading" id="homeLoading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">正在加载数据...</div>
+    </div>
+
+    <div id="stockList" style="display:none;"></div>
+
+    <div style="height: 20px;"></div>
+  </div>
+
+  <!-- 详情页 -->
+  <div class="page" id="detailPage">
+    <div id="detailHeader"></div>
+
+    <div class="chart-container">
+      <div id="detailChart"></div>
+    </div>
+    <div class="data-range" id="dataRange"></div>
+
+    <div class="action-box buy" id="actionBox">
+      <div class="action-title">--</div>
+      <div class="action-text">--</div>
+    </div>
+
+    <div class="section-title">信号检查</div>
+    <div class="signal-checks" id="signalChecks"></div>
+
+    <div class="section-title">回测业绩</div>
+    <div class="detail-metrics" id="detailMetrics"></div>
+
+    <div class="section-title">近期交易（最近10笔）</div>
+    <div class="trades-list" id="tradesList">
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <div class="empty-text">暂无交易记录</div>
+      </div>
+    </div>
+
+    <div style="height: 20px;"></div>
+  </div>
+
+  <!-- 设置页 -->
+  <div class="page" id="settingsPage">
+    <div class="section-title">策略选择</div>
+    <div class="strategy-selector" id="strategySelector">
+      <div class="strategy-option active" data-strategy="macd_cross">
+        <div class="strategy-name">MACD金叉死叉</div>
+        <div class="strategy-desc">胜率77% · 回撤-10% · 推荐</div>
+      </div>
+      <div class="strategy-option" data-strategy="ma_cross">
+        <div class="strategy-name">MA金叉死叉</div>
+        <div class="strategy-desc">收益136% · 交易最少</div>
+      </div>
+      <div class="strategy-option" data-strategy="composite">
+        <div class="strategy-name">复合趋势策略</div>
+        <div class="strategy-desc">收益149% · 多条件过滤</div>
+      </div>
+    </div>
+
+    <!-- MACD金叉死叉参数 -->
+    <div class="strategy-params" id="params_macd_cross">
+      <div class="section-title">MACD参数</div>
+      <div class="settings-group">
+        <div class="settings-item">
+          <div>
+            <div class="settings-label">DIF快线周期</div>
+            <div class="settings-desc">EMA周期，默认12</div>
+          </div>
+          <input type="number" class="settings-input" id="macdFastInput" value="12">
+        </div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-label">DIF慢线周期</div>
+            <div class="settings-desc">EMA周期，默认26</div>
+          </div>
+          <input type="number" class="settings-input" id="macdSlowInput" value="26">
+        </div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-label">信号线周期</div>
+            <div class="settings-desc">DEA的EMA周期，默认9</div>
+          </div>
+          <input type="number" class="settings-input" id="macdSignalInput" value="9">
+        </div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-label">零轴过滤</div>
+            <div class="settings-desc">仅在零轴上方金叉时买入</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="zeroAxisFilterInput" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- MA金叉死叉参数 -->
+    <div class="strategy-params" id="params_ma_cross">
+      <div class="section-title">MA参数</div>
+      <div class="settings-group">
+        <div class="settings-item">
+          <div>
+            <div class="settings-label">快均线周期</div>
+            <div class="settings-desc">短期趋势判断，默认20日（MA20）</div>
+          </div>
+          <input type="number" class="settings-input" id="maFastInput" value="20">
+        </div>
+        <div class="settings-item">
+          <div>
+            <div class="settings-label">慢均线周期</div>
+            <div class="settings-desc">中期趋势判断，默认60日（MA60）</div>
+          </div>
+          <input type="number" class="settings-input" id="maSlowInput" value="60">
+        </div>
+      </div>
+    </div>
+
+    <!-- 复合趋势策略参数 -->
+    <div class="strategy-params active" id="params_composite">
+      <div class="section-title">均线参数</div>
+    <div class="settings-group">
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">快均线周期</div>
+          <div class="settings-desc">短期趋势判断，默认20日（MA20）</div>
+        </div>
+        <input type="number" class="settings-input" id="fastMAInput" value="20">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">慢均线周期</div>
+          <div class="settings-desc">中期趋势判断，默认60日（MA60）</div>
+        </div>
+        <input type="number" class="settings-input" id="slowMAInput" value="60">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">MA60长期趋势过滤</div>
+          <div class="settings-desc">价格需在MA60上方才入场</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="useMA60Input">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section-title">过滤条件</div>
+    <div class="settings-group">
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">MACD过滤</div>
+          <div class="settings-desc">MACD柱>0才入场</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="useMACDInput" checked>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">RSI过滤</div>
+          <div class="settings-desc">RSI在区间内才入场</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="useRSIInput" checked>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">RSI下限</div>
+          <div class="settings-desc">默认40，避免接刀</div>
+        </div>
+        <input type="number" class="settings-input" id="rsiLowInput" value="40">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">RSI上限</div>
+          <div class="settings-desc">默认70，避免追高</div>
+        </div>
+        <input type="number" class="settings-input" id="rsiHighInput" value="70">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">成交量确认</div>
+          <div class="settings-desc">成交量需大于均量×倍数才入场</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="useVolumeInput">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">成交量放大倍数</div>
+          <div class="settings-desc">默认1.5倍，当日量/20日均量</div>
+        </div>
+        <input type="number" class="settings-input" id="volumeRatioInput" value="1.5" step="0.1">
+      </div>
+    </div>
+
+    <div class="section-title">确认机制</div>
+    <div class="settings-group">
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">入场确认天数</div>
+          <div class="settings-desc">连续满足N天才买入，默认2天</div>
+        </div>
+        <input type="number" class="settings-input" id="entryConfirmInput" value="2">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">出场确认天数</div>
+          <div class="settings-desc">连续跌破N天才卖出，默认2天</div>
+        </div>
+        <input type="number" class="settings-input" id="exitConfirmInput" value="2">
+      </div>
+    </div>
+
+    </div>
+    </div><!-- end params_composite -->
+
+    <div class="section-title">数据管理</div>
+    <div class="settings-group">
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">清除缓存</div>
+          <div class="settings-desc">删除所有本地缓存的股票数据</div>
+        </div>
+        <button class="btn btn-secondary" id="clearCacheBtn" style="width:auto; padding:8px 16px;">清除</button>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="saveSettingsBtn" style="margin-top: 20px;">保存设置</button>
+    <button class="btn btn-secondary" id="restoreDefaultBtn" style="margin-top: 10px;">恢复默认设置</button>
+
+    <div style="height: 40px;"></div>
+  </div>
+
+  <!-- 底部Tab栏 -->
+  <div class="tab-bar">
+    <div class="tab-item active" data-page="home">
+      <div class="tab-icon">📊</div>
+      <div class="tab-label">自选</div>
+    </div>
+    <div class="tab-item" data-page="settings">
+      <div class="tab-icon">⚙️</div>
+      <div class="tab-label">设置</div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="js/strategy.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+
+  <script>
+    // iOS Safari: 激活 :active 伪类
+    document.addEventListener('touchstart', function(){}, { passive: true });
+
+    // 注册Service Worker（PWA支持）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js', { scope: './' })
+          .then(reg => {
+            // 检测SW更新
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // 有新版本可用，提示刷新
+                  console.log('新版本已就绪，刷新后生效');
+                  if (window.App && App.showToast) {
+                    App.showToast('新版本已就绪，刷新页面生效');
+                  }
+                }
+              });
+            });
+          })
+          .catch(err => {
+            console.log('Service Worker注册失败:', err);
+          });
+
+        // SW控制器变化时自动刷新
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      });
+    }
+  </script>
+</body>
+</html>
