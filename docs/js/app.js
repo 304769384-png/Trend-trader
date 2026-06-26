@@ -827,9 +827,6 @@ const App = {
     const displayData = data;
     const dates = displayData.map(d => d.date.slice(5));
     const closes = displayData.map(d => d.close);
-    const maFast = displayData.map(d => d[`ma${this.settings.fastMA}`]);
-    const maSlow = displayData.map(d => d[`ma${this.settings.slowMA}`]);
-    const ma60 = displayData.map(d => d.ma60);
 
     // 买卖点
     const buyPoints = [];
@@ -844,6 +841,79 @@ const App = {
       if (exitIdx >= 0) {
         sellPoints.push([exitIdx, trade.exitPrice, trade.pnl * 100]);
       }
+    }
+
+    // 根据策略类型构建不同的指标线
+    const indicatorSeries = [];
+
+    if (this.currentStrategy === 'macd_cross') {
+      // MACD策略：显示DIF、DEA
+      const macdFast = this.settings.macdFast || 12;
+      const macdSlow = this.settings.macdSlow || 26;
+      indicatorSeries.push({
+        name: `DIF(${macdFast},${macdSlow})`,
+        type: 'line',
+        data: displayData.map(d => d.macd),
+        lineStyle: { width: 1.5, color: '#FF9500' },
+        showSymbol: false,
+        z: 1,
+      });
+      indicatorSeries.push({
+        name: 'DEA',
+        type: 'line',
+        data: displayData.map(d => d.macdSignal),
+        lineStyle: { width: 1.5, color: '#34C759' },
+        showSymbol: false,
+        z: 1,
+      });
+    } else if (this.currentStrategy === 'ma_cross') {
+      // MA策略：显示快/慢均线
+      const fastMA = this.settings.fastMA || 20;
+      const slowMA = this.settings.slowMA || 60;
+      indicatorSeries.push({
+        name: `MA${fastMA}`,
+        type: 'line',
+        data: displayData.map(d => d[`ma${fastMA}`]),
+        lineStyle: { width: 1.5, color: '#FF9500' },
+        showSymbol: false,
+        z: 1,
+      });
+      indicatorSeries.push({
+        name: `MA${slowMA}`,
+        type: 'line',
+        data: displayData.map(d => d[`ma${slowMA}`]),
+        lineStyle: { width: 1.5, color: '#34C759' },
+        showSymbol: false,
+        z: 1,
+      });
+    } else {
+      // 复合策略：显示MA快线、慢线、MA60
+      const fastMA = this.settings.fastMA || 20;
+      const slowMA = this.settings.slowMA || 60;
+      indicatorSeries.push({
+        name: `MA${fastMA}`,
+        type: 'line',
+        data: displayData.map(d => d[`ma${fastMA}`]),
+        lineStyle: { width: 1.5, color: '#FF9500' },
+        showSymbol: false,
+        z: 1,
+      });
+      indicatorSeries.push({
+        name: `MA${slowMA}`,
+        type: 'line',
+        data: displayData.map(d => d[`ma${slowMA}`]),
+        lineStyle: { width: 1.5, color: '#34C759' },
+        showSymbol: false,
+        z: 1,
+      });
+      indicatorSeries.push({
+        name: 'MA60',
+        type: 'line',
+        data: displayData.map(d => d.ma60),
+        lineStyle: { width: 1, color: '#8E8E93', type: 'dashed' },
+        showSymbol: false,
+        z: 1,
+      });
     }
 
     const chartDom = document.getElementById('detailChart');
@@ -873,11 +943,11 @@ const App = {
     const option = {
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'line' }, /* 移动端用line而非cross，避免手指遮挡 */
+        axisPointer: { type: 'line' },
         backgroundColor: 'rgba(0,0,0,0.85)',
         borderWidth: 0,
         textStyle: { color: '#fff', fontSize: 12 },
-        confine: true, /* 限制tooltip在图表区域内，防止超出屏幕 */
+        confine: true,
         formatter: function(params) {
           let res = displayData[params[0].dataIndex]?.date || '';
           res += '<br/>';
@@ -890,7 +960,7 @@ const App = {
               if (pnl !== undefined) res += ' (' + (pnl > 0 ? '+' : '') + pnl.toFixed(1) + '%)';
               res += '<br/>';
             } else {
-              res += p.marker + p.seriesName + ': ' + (typeof p.value === 'number' ? p.value.toFixed(2) : '') + '<br/>';
+              res += p.marker + p.seriesName + ': ' + (typeof p.value === 'number' ? p.value.toFixed(4) : '') + '<br/>';
             }
           });
           return res;
@@ -907,7 +977,7 @@ const App = {
           type: 'slider',
           start: defaultStart,
           end: defaultEnd,
-          height: 28, /* 增大触控区域，iOS手指友好 */
+          height: 28,
           bottom: 5,
           borderColor: 'transparent',
           backgroundColor: 'rgba(0,0,0,0.05)',
@@ -942,30 +1012,7 @@ const App = {
           showSymbol: false,
           z: 1,
         },
-        {
-          name: `MA${this.settings.fastMA}`,
-          type: 'line',
-          data: maFast,
-          lineStyle: { width: 1.5, color: '#FF9500' },
-          showSymbol: false,
-          z: 1,
-        },
-        {
-          name: `MA${this.settings.slowMA}`,
-          type: 'line',
-          data: maSlow,
-          lineStyle: { width: 1.5, color: '#34C759' },
-          showSymbol: false,
-          z: 1,
-        },
-        {
-          name: 'MA60',
-          type: 'line',
-          data: ma60,
-          lineStyle: { width: 1, color: '#8E8E93', type: 'dashed' },
-          showSymbol: false,
-          z: 1,
-        },
+        ...indicatorSeries,
         {
           name: '买入点',
           type: 'scatter',

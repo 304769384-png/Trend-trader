@@ -660,9 +660,16 @@ const StrategyEngine = {
   },
 
   /**
-   * MACD金叉死叉回测
+   * 运行回测（主入口，兼容旧调用）
    */
-  _runMACDCrossBacktest(data, params, initCapital) {
+  runBacktest(data, params = {}, initCapital = 100000) {
+    return this._runCompositeBacktest(data, params, initCapital);
+  },
+
+  /**
+   * 复合策略回测（原runBacktest逻辑）
+   */
+  _runCompositeBacktest(data, params, initCapital) {
     if (!data || !Array.isArray(data) || data.length < 40) {
       return {
         totalReturn: 0, annualReturn: 0, maxDrawdown: 0, winRate: 0,
