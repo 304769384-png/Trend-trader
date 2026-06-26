@@ -670,6 +670,235 @@ const StrategyEngine = {
    * 复合策略回测（原runBacktest逻辑）
    */
   _runCompositeBacktest(data, params, initCapital) {
+    if (!data || !Array.isArray(data) || data.length < 60) {
+      return {
+        totalReturn: 0, annualReturn: 0, maxDrawdown: 0, winRate: 0,
+        nTrades: 0, trades: [], equity: [], sharpe: 0, profitLossRatio: 0,
+        calmar: 0, expectancy: 0, maxConsecLoss: 0, avgWin: 0, avgLoss: 0,
+        finalValue: initCapital, error: '数据不足，无法回测',
+      };
+    }
+    const p = this.validateParams(params);
+    const fastKey = `ma${p.fastMA}`;
+    const slowKey = `ma${p.slowMA}`;
+
+    let capital = initCapital;
+    let shares = 0;
+    let inPosition = false;
+    let entryPrice = 0;
+    let highestPrice = 0;
+    let holdDays = 0;
+    let entryConfirm = 0;
+    let exitConfirm = 0;
+
+    const trades = [];
+    const equity = [];
+    let currentTrade = null;
+
+    const commission = 0.0003;
+    const stampDuty = 0.001;
+    const slippage = 0.001;
+
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      const cp = d.close;
+      const fma = d[fastKey];
+      const sma = d[slowKey];
+
+      if (fma === null || sma === null) {
+        equity.push(capital + shares * cp);
+        entryConfirm = 0;
+        exitConfirm = 0;
+        continue;
+      }
+
+      if (inPosition) {
+        holdDays++;
+        if (cp > highestPrice) highestPrice = cp;
+      }
+
+      const aboveFast = cp > fma;
+      const aboveSlow = cp > sma;
+
+      // 入场条件检查
+      let baseEntry = aboveFast && aboveSlow;
+
+      // MA60长期趋势过滤
+      if (p.useMA60 && d.ma60 !== null) {
+        baseEntry = baseEntry && cp > d.ma60;
+      }
+
+      // 成交量确认过滤
+      if (p.useVolume && d.volMA20 !== null && d.volMA20 > 0) {
+        baseEntry = baseEntry && d.volume > d.volMA20 * p.volumeRatio;
+      }
+
+      if (p.useMACD && d.macdHist !== null) {
+        baseEntry = baseEntry && d.macdHist > 0;
+      }
+
+      if (p.useRSI && d.rsi !== null) {
+        baseEntry = baseEntry && d.rsi >= p.rsiLow && d.rsi <= p.rsiHigh;
+      }
+
+      if (baseEntry) {
+        entryConfirm++;
+        exitConfirm = 0;
+      } else {
+        entryConfirm = 0;
+      }
+
+      const canEnter = entryConfirm >= p.entryConfirm;
+
+      // 出场条件检查
+      if (inPosition) {
+        let shouldSell = false;
+        let reason = '';
+
+        if (!aboveFast) {
+          exitConfirm++;
+          if (exitConfirm >= p.exitConfirm) {
+            shouldSell = true;
+            reason = `连续${p.exitConfirm}天跌破MA${p.fastMA}`;
+          }
+        } else {
+          exitConfirm = 0;
+        }
+
+        if (shouldSell) {
+          const sellPrice = cp * (1 - slippage);
+          const proceeds = shares * sellPrice * (1 - commission - stampDuty);
+          capital += proceeds;
+          const pnl = (sellPrice - entryPrice) / entryPrice;
+
+          currentTrade.exitDate = d.date;
+          currentTrade.exitPrice = sellPrice;
+          currentTrade.pnl = pnl;
+          currentTrade.holdDays = holdDays;
+          currentTrade.reason = reason;
+          currentTrade.maxProfit = (highestPrice - entryPrice) / entryPrice;
+          trades.push(currentTrade);
+          currentTrade = null;
+
+          shares = 0;
+          inPosition = false;
+          exitConfirm = 0;
+        }
+      }
+
+      // 入场
+      if (!inPosition && canEnter) {
+        const buyPrice = cp * (1 + slippage);
+        const costPerShare = buyPrice * (1 + commission);
+        const maxShares = Math.floor(capital / costPerShare / 100) * 100;
+
+        if (maxShares > 0) {
+          shares = maxShares;
+          capital -= shares * buyPrice * (1 + commission);
+          entryPrice = buyPrice;
+          highestPrice = buyPrice;
+          inPosition = true;
+          holdDays = 0;
+          entryConfirm = 0;
+          exitConfirm = 0;
+
+          currentTrade = {
+            entryDate: d.date,
+            entryPrice: buyPrice,
+            shares: maxShares,
+          };
+        }
+      }
+
+      equity.push(capital + shares * cp);
+    }
+
+    // 强制平仓
+    if (inPosition && currentTrade) {
+      const lastPrice = data[data.length - 1].close;
+      const sellPrice = lastPrice * (1 - slippage);
+      const proceeds = shares * sellPrice * (1 - commission - stampDuty);
+      capital += proceeds;
+      const pnl = (sellPrice - entryPrice) / entryPrice;
+
+      currentTrade.exitDate = data[data.length - 1].date;
+      currentTrade.exitPrice = sellPrice;
+      currentTrade.pnl = pnl;
+      currentTrade.holdDays = holdDays;
+      currentTrade.reason = '回测结束';
+      currentTrade.maxProfit = (highestPrice - entryPrice) / entryPrice;
+      trades.push(currentTrade);
+    }
+
+    // 计算统计指标
+    const totalReturn = (capital - initCapital) / initCapital;
+    const nTrades = trades.length;
+    const wins = trades.filter(t => t.pnl > 0);
+    const losses = trades.filter(t => t.pnl <= 0);
+    const winRate = nTrades > 0 ? wins.length / nTrades : 0;
+    const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0;
+    const avgLoss = losses.length > 0 ? losses.reduce((s, t) => s + t.pnl, 0) / losses.length : 0;
+    const profitLossRatio = avgLoss !== 0 ? Math.abs(avgWin / avgLoss) : 0;
+    const expectancy = winRate * avgWin + (1 - winRate) * avgLoss;
+
+    // 最大回撤
+    let maxDrawdown = 0;
+    let peak = equity[0];
+    for (let i = 1; i < equity.length; i++) {
+      if (equity[i] > peak) peak = equity[i];
+      const dd = (equity[i] - peak) / peak;
+      if (dd < maxDrawdown) maxDrawdown = dd;
+    }
+
+    // 夏普比率
+    const dailyReturns = [];
+    for (let i = 1; i < equity.length; i++) {
+      dailyReturns.push((equity[i] - equity[i - 1]) / equity[i - 1]);
+    }
+    const avgReturn = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
+    const stdReturn = Math.sqrt(dailyReturns.reduce((s, r) => s + (r - avgReturn) ** 2, 0) / dailyReturns.length);
+    const sharpe = stdReturn > 0 ? Math.sqrt(252) * avgReturn / stdReturn : 0;
+
+    // 最大连续亏损
+    let maxConsecLoss = 0;
+    let curLoss = 0;
+    for (const t of trades) {
+      if (t.pnl <= 0) {
+        curLoss++;
+        if (curLoss > maxConsecLoss) maxConsecLoss = curLoss;
+      } else {
+        curLoss = 0;
+      }
+    }
+
+    // Calmar比率
+    const years = data.length / 252;
+    const annualReturn = years > 0 ? Math.pow(1 + totalReturn, 1 / years) - 1 : 0;
+    const calmar = maxDrawdown !== 0 ? Math.abs(annualReturn / maxDrawdown) : 0;
+
+    return {
+      totalReturn,
+      annualReturn,
+      sharpe,
+      maxDrawdown,
+      calmar,
+      nTrades,
+      winRate,
+      avgWin,
+      avgLoss,
+      profitLossRatio,
+      expectancy,
+      maxConsecLoss,
+      trades,
+      equity,
+      finalValue: capital,
+    };
+  },
+
+  /**
+   * MACD金叉死叉回测
+   */
+  _runMACDCrossBacktest(data, params, initCapital) {
     if (!data || !Array.isArray(data) || data.length < 40) {
       return {
         totalReturn: 0, annualReturn: 0, maxDrawdown: 0, winRate: 0,
