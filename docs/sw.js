@@ -3,7 +3,7 @@
  * 趋势交易助手 PWA
  */
 
-const CACHE_NAME = 'trend-trader-v6';
+const CACHE_NAME = 'trend-trader-v7';
 // 核心资源预缓存（包含ECharts本地文件）
 const CORE_ASSETS = [
   './',
