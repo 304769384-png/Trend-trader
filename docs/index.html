@@ -2,17 +2,38 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="趋势交易助手 - 双均线趋势策略交易工具，支持MACD/MA/复合策略、实时信号、历史回测、自定义参数">
+  <meta name="keywords" content="趋势交易,股票,ETF,A股,技术分析,MACD,RSI,均线策略,回测">
+  <meta name="author" content="AlphaQuant">
+
+  <!-- PWA / Safari 桌面适配 -->
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="趋势助手">
   <meta name="format-detection" content="telephone=no">
-  <meta name="theme-color" content="#007AFF">
-  <title>趋势交易助手</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta name="theme-color" content="#0A1628" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png">
+
+  <!-- Apple Touch Icons (全尺寸) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+
+  <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-192.png">
-  <link rel="icon" type="image/png" href="icons/icon-192.png">
+
+  <title>趋势交易助手 - AlphaQuant</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- ECharts: 本地加载（避免CDN被墙导致图表组件加载失败） -->
   <script src="js/echarts.min.js"></script>
 </head>
 <body>
@@ -23,7 +44,8 @@
     </button>
     <div class="nav-title" id="navTitle">趋势交易助手</div>
     <div class="nav-right" id="navRight">
-      <button class="nav-btn" id="refreshBtn" title="刷新数据">↻</button>
+      <button class="nav-btn" id="themeToggleBtn" title="切换深浅模式">🌓</button>
+      <button class="nav-btn" id="refreshBtn" title="刷新数据 (R)">↻</button>
     </div>
   </div>
 
@@ -55,24 +77,10 @@
         <button class="search-btn" id="searchBtn">添加</button>
       </div>
       <div class="search-tips">
-        💡 支持A股（6位代码）和ETF，自动下载历史数据并回测
-      </div>
-      <div id="searchResult" style="display:none; margin-top: 12px;"></div>
+      💡 支持A股（6位代码）和ETF，自动下载历史数据并回测
     </div>
-
-    <div class="stats-grid" id="statsGrid" style="display:none;">
-      <div class="stat-card">
-        <div class="stat-value success">0</div>
-        <div class="stat-label">买入</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value warning">0</div>
-        <div class="stat-label">观察</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value danger">0</div>
-        <div class="stat-label">观望</div>
-      </div>
+    <div id="searchHistory" class="search-history" style="display:none;"></div>
+    <div id="searchResult" style="display:none; margin-top: 12px;"></div>
     </div>
 
     <div class="group-header">
@@ -86,6 +94,8 @@
     </div>
 
     <div id="stockList" style="display:none;"></div>
+
+    <div class="last-updated" id="lastUpdated" style="display:none;"></div>
 
     <div style="height: 20px;"></div>
   </div>
@@ -106,6 +116,16 @@
 
     <div class="section-title">信号检查</div>
     <div class="signal-checks" id="signalChecks"></div>
+
+    <div id="sellSignalSection" style="display:none;">
+      <div class="section-title">卖出信号检查</div>
+      <div class="signal-checks" id="sellSignalChecks"></div>
+    </div>
+
+    <div id="gridSection" style="display:none;">
+      <div class="section-title">网格交易参数</div>
+      <div id="gridInfo"></div>
+    </div>
 
     <div class="section-title">回测业绩</div>
     <div class="detail-metrics" id="detailMetrics"></div>
@@ -218,11 +238,21 @@
       </div>
       <div class="settings-item">
         <div>
-          <div class="settings-label">MA60长期趋势过滤</div>
-          <div class="settings-desc">价格需在MA60上方才入场</div>
+          <div class="settings-label">MA250长期趋势过滤</div>
+          <div class="settings-desc">价格需在MA250上方才入场（年线过滤）</div>
         </div>
         <label class="switch">
-          <input type="checkbox" id="useMA60Input">
+          <input type="checkbox" id="useMA250Input">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">均线多头排列过滤</div>
+          <div class="settings-desc">快均线需在慢均线上方才入场（MA20>MA60）</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="useMAPerfectInput">
           <span class="switch-slider"></span>
         </label>
       </div>
@@ -260,9 +290,9 @@
       <div class="settings-item">
         <div>
           <div class="settings-label">RSI上限</div>
-          <div class="settings-desc">默认70，避免追高</div>
+          <div class="settings-desc">默认80，避免追高</div>
         </div>
-        <input type="number" class="settings-input" id="rsiHighInput" value="70">
+        <input type="number" class="settings-input" id="rsiHighInput" value="80">
       </div>
       <div class="settings-item">
         <div>
@@ -288,20 +318,54 @@
       <div class="settings-item">
         <div>
           <div class="settings-label">入场确认天数</div>
-          <div class="settings-desc">连续满足N天才买入，默认2天</div>
+          <div class="settings-desc">连续满足N天才买入，默认3天</div>
         </div>
-        <input type="number" class="settings-input" id="entryConfirmInput" value="2">
+        <input type="number" class="settings-input" id="entryConfirmInput" value="3">
       </div>
       <div class="settings-item">
         <div>
           <div class="settings-label">出场确认天数</div>
-          <div class="settings-desc">连续跌破N天才卖出，默认2天</div>
+          <div class="settings-desc">连续跌破N天才卖出，默认3天</div>
         </div>
-        <input type="number" class="settings-input" id="exitConfirmInput" value="2">
+        <input type="number" class="settings-input" id="exitConfirmInput" value="3">
       </div>
     </div>
 
+    <div class="section-title">双模式系统</div>
+    <div class="settings-group">
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">震荡过滤（趋势/震荡双模式）</div>
+          <div class="settings-desc">开启后自动识别市场状态：趋势市持股待涨，震荡市网格交易</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="useOscillationFilterInput">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">ADX阈值</div>
+          <div class="settings-desc">ADX>阈值且MA20斜率>斜率阈值=趋势市，默认20</div>
+        </div>
+        <input type="number" class="settings-input" id="adxThresholdInput" value="20">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">MA20斜率阈值（度）</div>
+          <div class="settings-desc">MA20斜率角度>此值才算趋势，默认1.0°</div>
+        </div>
+        <input type="number" class="settings-input" id="slopeThresholdInput" value="1.0" step="0.1">
+      </div>
+      <div class="settings-item">
+        <div>
+          <div class="settings-label">模式切换确认天数</div>
+          <div class="settings-desc">连续N天满足才切换模式，防ADX抖动，默认3天</div>
+        </div>
+        <input type="number" class="settings-input" id="regimeConfirmDaysInput" value="3">
+      </div>
     </div>
+
     </div><!-- end params_composite -->
 
     <div class="section-title">数据管理</div>

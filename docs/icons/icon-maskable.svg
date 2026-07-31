@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0A1628;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#0D2A5C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1A1450;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="trendGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00D4FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#34C759;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="areaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00D4FF;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#00D4FF;stop-opacity:0" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFA500;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Full bleed background for maskable -->
+  <rect width="512" height="512" fill="url(#bgGrad)"/>
+
+  <!-- All content within safe zone (center 80%, i.e., 51-461 range) -->
+  <g transform="translate(0, 10) scale(0.85) translate(45, 45)">
+    <!-- Area fill under trend line -->
+    <path d="M 96 360 L 160 320 L 224 340 L 288 240 L 352 200 L 416 120 L 416 420 L 96 420 Z"
+          fill="url(#areaGrad)"/>
+
+    <!-- Main trend line (ascending) -->
+    <path d="M 96 360 L 160 320 L 224 340 L 288 240 L 352 200 L 416 120"
+          stroke="url(#trendGrad)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"
+          filter="url(#glow)"/>
+
+    <!-- Trend line data points -->
+    <circle cx="96" cy="360" r="8" fill="#00D4FF" opacity="0.6"/>
+    <circle cx="160" cy="320" r="8" fill="#00D4FF" opacity="0.7"/>
+    <circle cx="224" cy="340" r="8" fill="#00D4FF" opacity="0.7"/>
+    <circle cx="288" cy="240" r="8" fill="#00D4FF" opacity="0.8"/>
+    <circle cx="352" cy="200" r="8" fill="#34C759" opacity="0.9"/>
+
+    <!-- Highlighted final point -->
+    <circle cx="416" cy="120" r="14" fill="#34C759" filter="url(#glow)"/>
+    <circle cx="416" cy="120" r="8" fill="white"/>
+
+    <!-- Candlestick elements -->
+    <rect x="120" y="280" width="16" height="60" rx="3" fill="#34C759" opacity="0.9"/>
+    <line x1="128" y1="265" x2="128" y2="355" stroke="#34C759" stroke-width="2" opacity="0.7"/>
+    <rect x="200" y="260" width="16" height="50" rx="3" fill="#34C759" opacity="0.9"/>
+    <line x1="208" y1="245" x2="208" y2="325" stroke="#34C759" stroke-width="2" opacity="0.7"/>
+
+    <!-- Gold arrow -->
+    <path d="M 376 160 L 416 120 L 456 160 L 436 160 L 416 135 L 396 160 Z"
+          fill="url(#goldGrad)" opacity="0.9" filter="url(#glow)"/>
+  </g>
+</svg>

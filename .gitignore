@@ -13,7 +13,7 @@ __pycache__/
 *.md
 !pwa/README.md
 *.html
-!pwa/index.html
+!docs/index.html
 requirements.txt
 config.yaml
 pyproject.toml

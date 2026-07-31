@@ -6,24 +6,28 @@
 const DataManager = {
   STORAGE_KEY: 'trend_trader_data',
   WATCHLIST_KEY: 'trend_trader_watchlist',
+  WATCHLIST_VERSION_KEY: 'trend_trader_watchlist_version',
+  WATCHLIST_VERSION: 3, // 版本号：更改默认自选股时递增，旧版自动重置
   SETTINGS_KEY: 'trend_trader_settings',
+  SETTINGS_VERSION_KEY: 'trend_trader_settings_version',
+  SETTINGS_VERSION: 4, // 版本号：更改默认设置时递增，旧版自动迁移
   bundleData: null, // 内存中的bundle数据
   backendAvailable: null, // 后端是否可用
 
   // 默认自选股（12个品种）
   defaultWatchlist: [
-    { code: '512000', name: '证券ETF', type: 'etf' },
-    { code: '159819', name: '人工智能ETF', type: 'etf' },
-    { code: '159562', name: '黄金股ETF', type: 'etf' },
-    { code: '300308.SZ', name: '中际旭创', type: 'stock' },
-    { code: '601899.SH', name: '紫金矿业', type: 'stock' },
-    { code: '002594.SZ', name: '比亚迪', type: 'stock' },
-    { code: '688981.SH', name: '中芯国际', type: 'stock' },
-    { code: '603986.SH', name: '兆易创新', type: 'stock' },
-    { code: '600519.SH', name: '贵州茅台', type: 'stock' },
-    { code: '000651.SZ', name: '格力电器', type: 'stock' },
-    { code: '601318.SH', name: '中国平安', type: 'stock' },
-    { code: '600436.SH', name: '片仔癀', type: 'stock' },
+    { code: '520500', name: '恒生创新药ETF', type: 'etf' },
+    { code: '159870', name: '化工ETF', type: 'etf' },
+    { code: '560860', name: '工业有色ETF', type: 'etf' },
+    { code: '512000', name: '券商ETF', type: 'etf' },
+    { code: '515220', name: '煤炭ETF', type: 'etf' },
+    { code: '159869', name: '游戏ETF', type: 'etf' },
+    { code: '512890', name: '红利低波ETF', type: 'etf' },
+    { code: '561170', name: '绿电50ETF', type: 'etf' },
+    { code: '517520', name: '黄金股ETF', type: 'etf' },
+    { code: '512170', name: '白酒ETF', type: 'etf' },
+    { code: '588200', name: '科创芯片ETF', type: 'etf' },
+    { code: '002594', name: '比亚迪', type: 'stock' },
   ],
 
   /**
@@ -170,9 +174,18 @@ const DataManager = {
 
   /**
    * 获取自选股列表
+   * 版本号不匹配时自动重置为新默认列表
    */
   getWatchlist() {
     try {
+      const savedVersion = parseInt(localStorage.getItem(this.WATCHLIST_VERSION_KEY) || '0');
+      if (savedVersion < this.WATCHLIST_VERSION) {
+        // 默认列表已更新，重置为新的默认列表
+        localStorage.removeItem(this.WATCHLIST_KEY);
+        localStorage.setItem(this.WATCHLIST_VERSION_KEY, String(this.WATCHLIST_VERSION));
+        console.log(`自选股版本更新: v${savedVersion} → v${this.WATCHLIST_VERSION}，已重置为默认列表`);
+        return [...this.defaultWatchlist];
+      }
       const saved = localStorage.getItem(this.WATCHLIST_KEY);
       if (saved) return JSON.parse(saved);
     } catch (e) {}
@@ -194,23 +207,53 @@ const DataManager = {
    * 获取策略设置
    */
   getSettings() {
-    try {
-      const saved = localStorage.getItem(this.SETTINGS_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {
-      fastMA: 15,
-      slowMA: 40,
-      useMA60: false,
+    const defaults = {
+      fastMA: 20,
+      slowMA: 60,
+      useMA250: false,
+      useMAPerfect: false, // 均线多头排列过滤（MA20>MA60才入场），默认关闭
       useVolume: false,
       volumeRatio: 1.5,
       useMACD: true,
       useRSI: true,
       rsiLow: 40,
-      rsiHigh: 70,
-      entryConfirm: 2,
-      exitConfirm: 2,
+      rsiHigh: 80,
+      entryConfirm: 3,
+      exitConfirm: 3,
+      // 双模式系统
+      useOscillationFilter: false,
+      adxThreshold: 20,
+      slopeThreshold: 1.0,
+      regimeConfirmDays: 3,
     };
+    try {
+      const saved = localStorage.getItem(this.SETTINGS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // 版本迁移：旧版设置自动应用新的默认值
+        const savedVersion = parseInt(localStorage.getItem(this.SETTINGS_VERSION_KEY) || '0');
+        if (savedVersion < this.SETTINGS_VERSION) {
+          // v2: MA250默认关闭、确认天数改为3天
+          if (savedVersion < 2) {
+            parsed.useMA250 = false;
+            parsed.entryConfirm = 3;
+            parsed.exitConfirm = 3;
+          }
+          // v3: 强制MA250默认关闭（修复250日线开关bug）
+          if (savedVersion < 3) {
+            parsed.useMA250 = false;
+          }
+          // v4: 添加均线多头排列过滤（默认关闭，让V21动态卖出均线发挥作用）
+          if (savedVersion < 4) {
+            parsed.useMAPerfect = false;
+          }
+          localStorage.setItem(this.SETTINGS_VERSION_KEY, String(this.SETTINGS_VERSION));
+        }
+        return { ...defaults, ...parsed };
+      }
+    } catch (e) {}
+    localStorage.setItem(this.SETTINGS_VERSION_KEY, String(this.SETTINGS_VERSION));
+    return defaults;
   },
 
   /**

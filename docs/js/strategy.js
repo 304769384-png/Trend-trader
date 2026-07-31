@@ -1,7 +1,8 @@
 /**
- * 趋势策略引擎 - V2.4
+ * 趋势策略引擎 - V2.5
  * 纯JavaScript实现，可在浏览器中运行
  * 策略：MA20/60双均线 + MACD + RSI + 入场/出场确认
+ * V2.5: MA250长期趋势过滤 + RSI上限80 + 卖出信号检查
  */
 
 const StrategyEngine = {
@@ -30,9 +31,10 @@ const StrategyEngine = {
       desc: 'MA+MACD+RSI多条件过滤，确认机制减少假信号',
       defaultParams: {
         fastMA: 20, slowMA: 60,
-        useMA60: false, useVolume: false, volumeRatio: 1.5,
-        useMACD: true, useRSI: true, rsiLow: 40, rsiHigh: 70,
-        entryConfirm: 2, exitConfirm: 2,
+        useMA250: false, useVolume: false, volumeRatio: 1.5,
+        useMACD: true, useRSI: true, rsiLow: 40, rsiHigh: 80,
+        entryConfirm: 3, exitConfirm: 3,
+        useOscillationFilter: false, adxThreshold: 20, slopeThreshold: 1.0, regimeConfirmDays: 3,
       }
     }
   },
@@ -41,15 +43,21 @@ const StrategyEngine = {
   defaultParams: {
     fastMA: 20,
     slowMA: 60,
-    useMA60: false,       // MA60长期趋势过滤
+    useMA250: false,      // MA250长期趋势过滤
+    useMAPerfect: false,   // 均线多头排列过滤（MA20>MA60才入场），默认关闭
     useVolume: false,     // 成交量确认过滤
     volumeRatio: 1.5,     // 成交量放大倍数阈值
     useMACD: true,
     useRSI: true,
     rsiLow: 40,
-    rsiHigh: 70,
-    entryConfirm: 2,
-    exitConfirm: 2,
+    rsiHigh: 80,
+    entryConfirm: 3,
+    exitConfirm: 3,
+    // 双模式系统参数
+    useOscillationFilter: false, // 震荡过滤：开启后自动识别趋势/震荡市
+    adxThreshold: 20,           // ADX阈值：>阈值=趋势市，<阈值=震荡市
+    slopeThreshold: 1.0,        // MA20斜率阈值（度）：>阈值=趋势
+    regimeConfirmDays: 3,       // 模式切换确认天数（防ADX抖动）
   },
 
   /**
@@ -85,12 +93,24 @@ const StrategyEngine = {
     if (!Number.isInteger(p.exitConfirm) || p.exitConfirm < 1 || p.exitConfirm > 30) {
       p.exitConfirm = this.defaultParams.exitConfirm;
     }
-    if (typeof p.useMA60 !== 'boolean') p.useMA60 = this.defaultParams.useMA60;
+    if (typeof p.useMA250 !== 'boolean') p.useMA250 = this.defaultParams.useMA250;
+    if (typeof p.useMAPerfect !== 'boolean') p.useMAPerfect = this.defaultParams.useMAPerfect;
     if (typeof p.useVolume !== 'boolean') p.useVolume = this.defaultParams.useVolume;
     if (typeof p.useMACD !== 'boolean') p.useMACD = this.defaultParams.useMACD;
     if (typeof p.useRSI !== 'boolean') p.useRSI = this.defaultParams.useRSI;
     if (typeof p.volumeRatio !== 'number' || p.volumeRatio <= 0 || p.volumeRatio > 10) {
       p.volumeRatio = this.defaultParams.volumeRatio;
+    }
+    // 双模式参数校验
+    if (typeof p.useOscillationFilter !== 'boolean') p.useOscillationFilter = this.defaultParams.useOscillationFilter;
+    if (!Number.isFinite(p.adxThreshold) || p.adxThreshold < 5 || p.adxThreshold > 60) {
+      p.adxThreshold = this.defaultParams.adxThreshold;
+    }
+    if (!Number.isFinite(p.slopeThreshold) || p.slopeThreshold < 0 || p.slopeThreshold > 10) {
+      p.slopeThreshold = this.defaultParams.slopeThreshold;
+    }
+    if (!Number.isInteger(p.regimeConfirmDays) || p.regimeConfirmDays < 1 || p.regimeConfirmDays > 10) {
+      p.regimeConfirmDays = this.defaultParams.regimeConfirmDays;
     }
     
     return p;
@@ -108,7 +128,7 @@ const StrategyEngine = {
     const result = data.map((d, i) => ({ ...d }));
 
     // 计算均线（滑动窗口法，O(n) 复杂度）
-    for (let period of [5, 10, 15, 20, 30, 40, 50, 60]) {
+    for (let period of [5, 10, 15, 20, 30, 40, 50, 60, 120, 250]) {
       let sum = 0;
       for (let i = 0; i < result.length; i++) {
         sum += result[i].close;
@@ -226,16 +246,268 @@ const StrategyEngine = {
       }
     }
 
+    // ADX (14) + ATR + MA20斜率 — 双模式系统核心指标
+    const adxResult = this._calculateADX(result, 14);
+    for (let i = 0; i < result.length; i++) {
+      result[i].adx = adxResult.adx[i];
+      result[i].plusDi = adxResult.plusDi[i];
+      result[i].minusDi = adxResult.minusDi[i];
+      result[i].atr = adxResult.atr[i];
+    }
+
+    // MA20 斜率（5日回望，转换为角度）
+    const slopeLookback = 5;
+    for (let i = 0; i < result.length; i++) {
+      if (i >= slopeLookback && result[i].ma20 !== null && result[i - slopeLookback].ma20 !== null) {
+        const slope = (result[i].ma20 - result[i - slopeLookback].ma20) / slopeLookback;
+        result[i].ma20Slope = Math.atan(slope) * 180.0 / Math.PI;
+      } else {
+        result[i].ma20Slope = null;
+      }
+    }
+
     return result;
   },
 
   /**
-   * 运行策略回测
-   * @param {Array} data - 带指标的数据
-   * @param {Object} params - 策略参数
-   * @param {Number} initCapital - 初始资金
-   * @returns {Object} 回测结果
+   * 计算ADX（Wilder原始公式）
+   * 已通过真实数据验证：值域[0,100]、趋势/震荡分类与价格走势吻合
+   * @param {Array} data - 带OHLC的数据数组
+   * @param {Number} period - ADX周期，默认14
+   * @returns {Object} { adx, plusDi, minusDi, atr } 数组
    */
+  _calculateADX(data, period = 14) {
+    const n = data.length;
+    const adx = new Array(n).fill(null);
+    const plusDi = new Array(n).fill(null);
+    const minusDi = new Array(n).fill(null);
+    const atr = new Array(n).fill(null);
+
+    if (n < period * 3) return { adx, plusDi, minusDi, atr };
+
+    // Step 1: +DM, -DM, TR
+    const plusDm = new Array(n).fill(0);
+    const minusDm = new Array(n).fill(0);
+    const tr = new Array(n).fill(0);
+
+    for (let i = 1; i < n; i++) {
+      const upMove = data[i].high - data[i - 1].high;
+      const downMove = data[i - 1].low - data[i].low;
+
+      // +DM: 上移>下移且上移>0
+      if (upMove > downMove && upMove > 0) {
+        plusDm[i] = upMove;
+      }
+      // -DM: 下移>上移且下移>0
+      if (downMove > upMove && downMove > 0) {
+        minusDm[i] = downMove;
+      }
+
+      // TR: 三者取最大
+      const tr1 = data[i].high - data[i].low;
+      const tr2 = Math.abs(data[i].high - data[i - 1].close);
+      const tr3 = Math.abs(data[i].low - data[i - 1].close);
+      tr[i] = Math.max(tr1, tr2, tr3);
+    }
+
+    // Step 2: Wilder平滑（第一个值=前period个值的和，后续=前值-前值/period+当前值）
+    const wilderSmooth = (values, startIdx, period) => {
+      const result = new Array(values.length).fill(null);
+      let firstSum = 0;
+      for (let j = startIdx; j < startIdx + period; j++) {
+        firstSum += values[j];
+      }
+      result[startIdx + period - 1] = firstSum;
+
+      for (let i = startIdx + period; i < values.length; i++) {
+        result[i] = result[i - 1] - result[i - 1] / period + values[i];
+      }
+      return result;
+    };
+
+    // 从 i=1 开始（i=0 没有 TR）
+    const trSmooth = wilderSmooth(tr, 1, period);
+    const plusDmSmooth = wilderSmooth(plusDm, 1, period);
+    const minusDmSmooth = wilderSmooth(minusDm, 1, period);
+
+    // ATR = TR_smooth / period
+    for (let i = 0; i < n; i++) {
+      if (trSmooth[i] !== null) {
+        atr[i] = trSmooth[i] / period;
+      }
+    }
+
+    // Step 3: +DI, -DI
+    const diStart = 1 + period;
+    for (let i = diStart; i < n; i++) {
+      if (trSmooth[i] !== null && trSmooth[i] > 0) {
+        plusDi[i] = 100.0 * plusDmSmooth[i] / trSmooth[i];
+        minusDi[i] = 100.0 * minusDmSmooth[i] / trSmooth[i];
+      }
+    }
+
+    // Step 4: DX = 100 * |+DI - -DI| / (+DI + -DI)
+    const dx = new Array(n).fill(null);
+    for (let i = diStart; i < n; i++) {
+      if (plusDi[i] !== null && minusDi[i] !== null) {
+        const diSum = plusDi[i] + minusDi[i];
+        if (diSum > 0) {
+          dx[i] = 100.0 * Math.abs(plusDi[i] - minusDi[i]) / diSum;
+        } else {
+          dx[i] = 0.0;
+        }
+      }
+    }
+
+    // Step 5: ADX = DX 的 Wilder 平滑
+    // 找到第一个连续 period 个 DX 值
+    let consecutive = 0;
+    let firstValid = -1;
+    for (let i = diStart; i < n; i++) {
+      if (dx[i] !== null) {
+        if (consecutive === 0) firstValid = i;
+        consecutive++;
+        if (consecutive === period) break;
+      } else {
+        consecutive = 0;
+        firstValid = -1;
+      }
+    }
+
+    if (firstValid < 0 || firstValid + period >= n) {
+      return { adx, plusDi, minusDi, atr };
+    }
+
+    const dxStart = firstValid;
+    const dxEnd = dxStart + period;
+
+    // 第一个 ADX = 前 period 个 DX 的简单平均
+    let dxSum = 0;
+    for (let i = dxStart; i < dxEnd; i++) {
+      dxSum += dx[i];
+    }
+    adx[dxEnd - 1] = dxSum / period;
+
+    // 后续 ADX = (前ADX * (period-1) + 当前DX) / period
+    for (let i = dxEnd; i < n; i++) {
+      if (dx[i] !== null && adx[i - 1] !== null) {
+        adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period;
+      }
+    }
+
+    return { adx, plusDi, minusDi, atr };
+  },
+
+  /**
+   * 检测市场状态（趋势/震荡）
+   * @param {Array} data - 带指标的数据
+   * @param {Number} idx - 当前位置索引
+   * @param {Object} params - 策略参数
+   * @returns {Object} { regime, adx, slope, plusDi, minusDi, confirmDays }
+   */
+  getMarketRegime(data, idx, params) {
+    const p = this.validateParams(params);
+    const d = data[idx];
+
+    const adx = d.adx;
+    const slope = d.ma20Slope;
+    const plusDi = d.plusDi;
+    const minusDi = d.minusDi;
+
+    if (adx === null || slope === null) {
+      return { regime: 'unknown', adx: null, slope: null, plusDi, minusDi, confirmDays: 0 };
+    }
+
+    // 判断当前是趋势还是震荡
+    const isTrend = adx > p.adxThreshold && Math.abs(slope) > p.slopeThreshold;
+
+    // 检查连续确认天数（防ADX抖动）
+    let confirmDays = 0;
+    for (let i = idx; i >= 0; i--) {
+      const di = data[i];
+      if (di.adx === null || di.ma20Slope === null) break;
+      const dayIsTrend = di.adx > p.adxThreshold && Math.abs(di.ma20Slope) > p.slopeThreshold;
+      if (dayIsTrend === isTrend) {
+        confirmDays++;
+      } else {
+        break;
+      }
+    }
+
+    // 需要连续 regimeConfirmDays 天确认才切换模式
+    let regime;
+    if (isTrend && confirmDays >= p.regimeConfirmDays) {
+      regime = 'trend';
+    } else if (!isTrend && confirmDays >= p.regimeConfirmDays) {
+      regime = 'choppy';
+    } else {
+      // 未达确认天数，保持上一日状态（滞后切换）
+      regime = 'transition';
+    }
+
+    return { regime, adx, slope, plusDi, minusDi, confirmDays };
+  },
+
+  /**
+   * 生成网格交易参数（震荡市专用）
+   * @param {Array} data - 带指标的数据
+   * @param {Number} idx - 当前位置索引
+   * @returns {Object} 网格参数
+   */
+  getGridParams(data, idx) {
+    const d = data[idx];
+    const price = d.close;
+    const atr = d.atr;
+
+    if (!atr || atr <= 0 || !price || price <= 0) {
+      return null;
+    }
+
+    // 网格间距 = ATR / 价格（百分比）
+    const spacingPct = atr / price;
+    const numGrids = 10;        // 总网格数
+    const halfGrids = numGrids / 2; // 上下各5格
+
+    // 中心价 = 当前价
+    const centerPrice = price;
+    // 网格间距（价格）
+    const gridSpacing = centerPrice * spacingPct;
+    // 上下限
+    const upperLimit = centerPrice * (1 + halfGrids * spacingPct);
+    const lowerLimit = centerPrice * (1 - halfGrids * spacingPct);
+
+    // 生成网格表
+    const grids = [];
+    for (let i = halfGrids; i >= -halfGrids; i--) {
+      const gridPrice = centerPrice * (1 + i * spacingPct);
+      const isBuy = i < 0;      // 低于中心价=买入网格
+      const isSell = i > 0;     // 高于中心价=卖出网格
+      const isCenter = i === 0;
+      grids.push({
+        level: i,
+        price: gridPrice,
+        type: isCenter ? '中心' : isBuy ? '买入' : '卖出',
+        action: isCenter ? '持有底仓' : isBuy ? `买入${(100 / numGrids * 2).toFixed(0)}%` : `卖出${(100 / numGrids * 2).toFixed(0)}%`,
+      });
+    }
+
+    // 止损条件：跌破下限3% 或 MA20死叉MA60
+    const stopLossPrice = lowerLimit * 0.97;
+
+    return {
+      centerPrice,
+      gridSpacing,
+      spacingPct: spacingPct * 100, // 百分比
+      upperLimit,
+      lowerLimit,
+      stopLossPrice,
+      numGrids,
+      basePositionPct: 40,   // 底仓40%
+      gridCapitalPct: 60,    // 网格资金60%
+      grids,
+      atr: atr,
+    };
+  },
   /**
    * 获取当前信号
    * @param {Array} data - 带指标的数据（最后一天为最新）
@@ -254,31 +526,73 @@ const StrategyEngine = {
       return { error: '数据不足' };
     }
 
-    // 计算连续满足天数
+    // === 简化版回测：跟踪当前是否处于持仓状态（与回测逻辑完全一致） ===
+    // 入场：所有条件满足 + confirmDays >= entryConfirm
+    // 出场：跌破MA20或MA60任一条，连续 exitConfirm 天
+    let inPosition = false;
+    let simEntryConfirm = 0;
+    let simExitConfirmFast = 0; // 跌破快均线连续天数
+    let simExitConfirmSlow = 0; // 跌破慢均线连续天数
+    
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      if (d[fastKey] === null || d[slowKey] === null) {
+        simEntryConfirm = 0;
+        simExitConfirmFast = 0;
+        simExitConfirmSlow = 0;
+        continue;
+      }
+      
+      const simAboveFast = d.close > d[fastKey];
+      const simAboveSlow = d.close > d[slowKey];
+      
+      // 入场条件（与回测一致）
+      let simBaseEntry = simAboveFast && simAboveSlow;
+      if (p.useMAPerfect && d[fastKey] !== null && d[slowKey] !== null) simBaseEntry = simBaseEntry && d[fastKey] > d[slowKey];
+      if (p.useMA250 && d.ma250 !== null) simBaseEntry = simBaseEntry && d.close > d.ma250;
+      if (p.useVolume && d.volMA20 !== null && d.volMA20 > 0) simBaseEntry = simBaseEntry && d.volume > d.volMA20 * p.volumeRatio;
+      if (p.useMACD && d.macdHist !== null) simBaseEntry = simBaseEntry && d.macdHist > 0;
+      if (p.useRSI && d.rsi !== null) simBaseEntry = simBaseEntry && d.rsi >= p.rsiLow && d.rsi <= p.rsiHigh;
+      
+      if (simBaseEntry) {
+        simEntryConfirm++;
+        simExitConfirmFast = 0;
+        simExitConfirmSlow = 0;
+      } else {
+        simEntryConfirm = 0;
+      }
+      
+      const simCanEnter = simEntryConfirm >= p.entryConfirm;
+      
+      // 出场检查：跌破MA20或MA60任一连续exitConfirm天就卖出
+      if (inPosition) {
+        if (!simAboveFast) simExitConfirmFast++; else simExitConfirmFast = 0;
+        if (!simAboveSlow) simExitConfirmSlow++; else simExitConfirmSlow = 0;
+        if (simExitConfirmFast >= p.exitConfirm || simExitConfirmSlow >= p.exitConfirm) {
+          inPosition = false;
+          simExitConfirmFast = 0;
+          simExitConfirmSlow = 0;
+        }
+      }
+      
+      if (!inPosition && simCanEnter) {
+        inPosition = true;
+        simEntryConfirm = 0;
+      }
+    }
+
+    // === 计算连续满足入场条件的天数（用于显示） ===
     let confirmDays = 0;
     for (let i = data.length - 1; i >= 0; i--) {
       const d = data[i];
       if (d[fastKey] === null || d[slowKey] === null) break;
 
       let ok = d.close > d[fastKey] && d.close > d[slowKey];
-
-      // MA60长期趋势过滤
-      if (p.useMA60 && d.ma60 !== null) {
-        ok = ok && d.close > d.ma60;
-      }
-
-      // 成交量确认过滤
-      if (p.useVolume && d.volMA20 !== null && d.volMA20 > 0) {
-        ok = ok && d.volume > d.volMA20 * p.volumeRatio;
-      }
-
-      if (p.useMACD && d.macdHist !== null) {
-        ok = ok && d.macdHist > 0;
-      }
-
-      if (p.useRSI && d.rsi !== null) {
-        ok = ok && d.rsi >= p.rsiLow && d.rsi <= p.rsiHigh;
-      }
+      if (p.useMAPerfect && d[fastKey] !== null && d[slowKey] !== null) ok = ok && d[fastKey] > d[slowKey];
+      if (p.useMA250 && d.ma250 !== null) ok = ok && d.close > d.ma250;
+      if (p.useVolume && d.volMA20 !== null && d.volMA20 > 0) ok = ok && d.volume > d.volMA20 * p.volumeRatio;
+      if (p.useMACD && d.macdHist !== null) ok = ok && d.macdHist > 0;
+      if (p.useRSI && d.rsi !== null) ok = ok && d.rsi >= p.rsiLow && d.rsi <= p.rsiHigh;
 
       if (ok) {
         confirmDays++;
@@ -290,44 +604,140 @@ const StrategyEngine = {
     const latest = data[data.length - 1];
     const aboveFast = latest.close > latest[fastKey];
     const aboveSlow = latest.close > latest[slowKey];
-    const ma60Ok = !p.useMA60 || (latest.ma60 !== null && latest.close > latest.ma60);
+    const maPerfectOk = !p.useMAPerfect || (latest[fastKey] !== null && latest[slowKey] !== null && latest[fastKey] > latest[slowKey]);
+    const ma250Ok = !p.useMA250 || (latest.ma250 !== null && latest.close > latest.ma250);
     const volOk = !p.useVolume || (latest.volMA20 !== null && latest.volMA20 > 0 && latest.volume > latest.volMA20 * p.volumeRatio);
     const macdOk = latest.macdHist !== null && latest.macdHist > 0;
     const rsiOk = latest.rsi !== null && latest.rsi >= p.rsiLow && latest.rsi <= p.rsiHigh;
 
     const allOk = aboveFast && aboveSlow &&
-      (!p.useMA60 || ma60Ok) &&
+      (!p.useMAPerfect || maPerfectOk) &&
+      (!p.useMA250 || ma250Ok) &&
       (!p.useVolume || volOk) &&
       (!p.useMACD || macdOk) &&
       (!p.useRSI || rsiOk) &&
       confirmDays >= p.entryConfirm;
 
+    // === 计算连续跌破MA20和MA60的天数 ===
+    let sellConfirmDaysFast = 0; // 跌破MA20连续天数
+    let sellConfirmDaysSlow = 0; // 跌破MA60连续天数
+    for (let i = data.length - 1; i >= 0; i--) {
+      const d = data[i];
+      if (d[fastKey] === null) break;
+      if (d.close < d[fastKey]) sellConfirmDaysFast++; else break;
+    }
+    for (let i = data.length - 1; i >= 0; i--) {
+      const d = data[i];
+      if (d[slowKey] === null) break;
+      if (d.close < d[slowKey]) sellConfirmDaysSlow++; else break;
+    }
+
+    const aboveSellMA = aboveFast && aboveSlow; // 同时在两条均线上方才算安全
+    // 取跌破天数较多的那条作为主要显示
+    const sellConfirmDays = Math.max(sellConfirmDaysFast, sellConfirmDaysSlow);
+    const sellTriggered = sellConfirmDaysFast >= p.exitConfirm || sellConfirmDaysSlow >= p.exitConfirm;
+
+    // === 信号判断（与回测逻辑一致） ===
     let signal, signalType, action;
-    if (allOk) {
-      signal = '🟢 买入/持有';
-      signalType = 'buy';
-      action = '满足所有入场条件，可以建仓或继续持有';
-    } else if (confirmDays > 0 && confirmDays < p.entryConfirm) {
-      signal = '🟡 观察中';
-      signalType = 'watch';
-      action = `已连续满足${confirmDays}天，还需${p.entryConfirm - confirmDays}天确认`;
+    let sellChecks = null;
+    
+    if (inPosition) {
+      // 当前持仓中
+      if (aboveSellMA) {
+        // close > 两条均线 → 继续持有
+        signal = '🟢 买入/持有';
+        signalType = 'buy';
+        action = `持仓中，价格在MA${p.fastMA}和MA${p.slowMA}上方，继续持有`;
+      } else {
+        // close < 任一均线 → 进入卖出确认期
+        if (!sellTriggered) {
+          // 卖出确认中
+          signal = '🟠 卖出确认中';
+          signalType = 'watch';
+          const parts = [];
+          if (sellConfirmDaysFast > 0) parts.push(`跌破MA${p.fastMA} ${sellConfirmDaysFast}天`);
+          if (sellConfirmDaysSlow > 0) parts.push(`跌破MA${p.slowMA} ${sellConfirmDaysSlow}天`);
+          action = `已${parts.join('，')}，还需${p.exitConfirm - sellConfirmDays}天确认卖出`;
+        } else {
+          // 卖出已触发（回测中已卖出）
+          signal = '🔴 空仓/观望';
+          signalType = 'sell';
+          const triggerMA = sellConfirmDaysFast >= p.exitConfirm ? p.fastMA : p.slowMA;
+          action = `已连续跌破MA${triggerMA} ${p.exitConfirm}天，卖出信号已触发`;
+        }
+      }
+      // 设置sellChecks（持仓中和卖出确认中都显示）
+      sellChecks = {
+        belowFast: !aboveFast,
+        belowSlow: !aboveSlow,
+        sellConfirmDaysFast,
+        sellConfirmDaysSlow,
+        sellConfirmDays,
+        sellRequiredConfirm: p.exitConfirm,
+        sellTriggered,
+        sellDaysRemaining: Math.max(0, p.exitConfirm - sellConfirmDays),
+        sellCondition: `连续${p.exitConfirm}天跌破MA${p.fastMA}或MA${p.slowMA}`,
+      };
     } else {
-      signal = '🔴 空仓/观望';
-      signalType = 'sell';
-      action = '不满足入场条件，建议空仓等待';
+      // 当前空仓
+      if (allOk) {
+        signal = '🟢 买入/持有';
+        signalType = 'buy';
+        action = '满足所有入场条件，可以建仓';
+        sellChecks = {
+          belowFast: !aboveFast,
+          belowSlow: !aboveSlow,
+          sellConfirmDaysFast,
+          sellConfirmDaysSlow,
+          sellConfirmDays,
+          sellRequiredConfirm: p.exitConfirm,
+          sellTriggered: false,
+          sellDaysRemaining: p.exitConfirm,
+          sellCondition: `连续${p.exitConfirm}天跌破MA${p.fastMA}或MA${p.slowMA}`,
+        };
+      } else if (confirmDays > 0 && confirmDays < p.entryConfirm) {
+        signal = '🟡 观察中';
+        signalType = 'watch';
+        action = `已连续满足${confirmDays}天，还需${p.entryConfirm - confirmDays}天确认`;
+      } else {
+        signal = '🔴 空仓/观望';
+        signalType = 'sell';
+        action = '不满足入场条件，建议空仓等待';
+      }
     }
 
     const missing = [];
     if (!aboveFast) missing.push(`价格低于MA${p.fastMA}`);
     if (!aboveSlow) missing.push(`价格低于MA${p.slowMA}`);
-    if (p.useMA60 && !ma60Ok) missing.push('价格低于MA60');
+    if (p.useMA250 && !ma250Ok) missing.push('价格低于MA250');
     if (p.useVolume && !volOk) missing.push('成交量未放大');
     if (p.useMACD && !macdOk) missing.push('MACD柱≤0');
     if (p.useRSI && !rsiOk) missing.push(`RSI不在${p.rsiLow}-${p.rsiHigh}区间`);
     if (confirmDays < p.entryConfirm && aboveFast && aboveSlow &&
-        (!p.useMA60 || ma60Ok) && (!p.useVolume || volOk) &&
+        (!p.useMA250 || ma250Ok) && (!p.useVolume || volOk) &&
         (!p.useMACD || macdOk) && (!p.useRSI || rsiOk)) {
       missing.push(`仅连续满足${confirmDays}天（需${p.entryConfirm}天）`);
+    }
+
+    // 双模式系统：检测市场状态 + 生成网格参数
+    let marketRegime = null;
+    let gridParams = null;
+    let modeLabel = '';
+    if (p.useOscillationFilter && latest.adx !== null && latest.ma20Slope !== null) {
+      const lastIdx = data.length - 1;
+      marketRegime = this.getMarketRegime(data, lastIdx, p);
+
+      if (marketRegime.regime === 'trend') {
+        modeLabel = '趋势模式 · 持股待涨';
+      } else if (marketRegime.regime === 'choppy') {
+        modeLabel = '震荡模式 · 网格交易';
+        // 买入信号在震荡市 → 生成网格参数
+        if (signalType === 'buy') {
+          gridParams = this.getGridParams(data, lastIdx);
+        }
+      } else {
+        modeLabel = `过渡期 · 确认${marketRegime.confirmDays}/${p.regimeConfirmDays}天`;
+      }
     }
 
     return {
@@ -339,23 +749,34 @@ const StrategyEngine = {
       checks: {
         aboveFast,
         aboveSlow,
-        ma60Ok,
+        ma250Ok,
         volOk,
         macdOk,
         rsiOk,
       },
+      sellChecks,
       latest: {
         price: latest.close,
         maFast: latest[fastKey],
         maSlow: latest[slowKey],
-        ma60: latest.ma60,
+        ma250: latest.ma250,
         volMA20: latest.volMA20,
         volume: latest.volume,
         macdHist: latest.macdHist,
         rsi: latest.rsi,
+        adx: latest.adx,
+        plusDi: latest.plusDi,
+        minusDi: latest.minusDi,
+        ma20Slope: latest.ma20Slope,
+        atr: latest.atr,
         date: latest.date,
       },
       missing,
+      // 双模式系统
+      marketRegime,
+      gridParams,
+      modeLabel,
+      useOscillationFilter: p.useOscillationFilter,
     };
   },
 
@@ -451,7 +872,8 @@ const StrategyEngine = {
     let highestPrice = 0;
     let holdDays = 0;
     let entryConfirm = 0;
-    let exitConfirm = 0;
+    let exitConfirmFast = 0; // 跌破快均线连续天数
+    let exitConfirmSlow = 0; // 跌破慢均线连续天数
 
     const trades = [];
     const equity = [];
@@ -470,7 +892,8 @@ const StrategyEngine = {
       if (fma === null || sma === null) {
         equity.push(capital + shares * cp);
         entryConfirm = 0;
-        exitConfirm = 0;
+        exitConfirmFast = 0;
+        exitConfirmSlow = 0;
         continue;
       }
 
@@ -485,9 +908,14 @@ const StrategyEngine = {
       // 入场条件检查
       let baseEntry = aboveFast && aboveSlow;
 
-      // MA60长期趋势过滤
-      if (p.useMA60 && d.ma60 !== null) {
-        baseEntry = baseEntry && cp > d.ma60;
+      // 均线多头排列过滤（MA20>MA60）
+      if (p.useMAPerfect) {
+        baseEntry = baseEntry && fma > sma;
+      }
+
+      // MA250长期趋势过滤
+      if (p.useMA250 && d.ma250 !== null) {
+        baseEntry = baseEntry && cp > d.ma250;
       }
 
       // 成交量确认过滤
@@ -505,26 +933,28 @@ const StrategyEngine = {
 
       if (baseEntry) {
         entryConfirm++;
-        exitConfirm = 0;
+        exitConfirmFast = 0;
+        exitConfirmSlow = 0;
       } else {
         entryConfirm = 0;
       }
 
       const canEnter = entryConfirm >= p.entryConfirm;
 
-      // 出场条件检查
+      // 出场条件检查：跌破MA20或MA60任一连续exitConfirm天就卖出
       if (inPosition) {
         let shouldSell = false;
         let reason = '';
 
-        if (!aboveFast) {
-          exitConfirm++;
-          if (exitConfirm >= p.exitConfirm) {
-            shouldSell = true;
-            reason = `连续${p.exitConfirm}天跌破MA${p.fastMA}`;
-          }
-        } else {
-          exitConfirm = 0;
+        if (!aboveFast) exitConfirmFast++; else exitConfirmFast = 0;
+        if (!aboveSlow) exitConfirmSlow++; else exitConfirmSlow = 0;
+
+        if (exitConfirmFast >= p.exitConfirm) {
+          shouldSell = true;
+          reason = `连续${p.exitConfirm}天跌破MA${p.fastMA}`;
+        } else if (exitConfirmSlow >= p.exitConfirm) {
+          shouldSell = true;
+          reason = `连续${p.exitConfirm}天跌破MA${p.slowMA}`;
         }
 
         if (shouldSell) {
@@ -544,7 +974,8 @@ const StrategyEngine = {
 
           shares = 0;
           inPosition = false;
-          exitConfirm = 0;
+          exitConfirmFast = 0;
+          exitConfirmSlow = 0;
         }
       }
 
@@ -562,7 +993,8 @@ const StrategyEngine = {
           inPosition = true;
           holdDays = 0;
           entryConfirm = 0;
-          exitConfirm = 0;
+          exitConfirmFast = 0;
+          exitConfirmSlow = 0;
 
           currentTrade = {
             entryDate: d.date,
@@ -1005,6 +1437,14 @@ const StrategyEngine = {
         goldenCross,
         deathCross,
       },
+      sellChecks: signalType === 'buy' ? {
+        belowFast: !difAboveDea,
+        sellConfirmDays: deathCross ? 1 : 0,
+        sellRequiredConfirm: 1,
+        sellTriggered: deathCross,
+        sellDaysRemaining: deathCross ? 0 : 1,
+        sellCondition: 'MACD死叉（DIF下穿DEA）',
+      } : null,
       latest: {
         price: latest.close,
         dif: latest.macd,
@@ -1076,6 +1516,14 @@ const StrategyEngine = {
         goldenCross,
         deathCross,
       },
+      sellChecks: signalType === 'buy' ? {
+        belowFast: !fastAboveSlow,
+        sellConfirmDays: deathCross ? 1 : 0,
+        sellRequiredConfirm: 1,
+        sellTriggered: deathCross,
+        sellDaysRemaining: deathCross ? 0 : 1,
+        sellCondition: `MA${params.fastMA}下穿MA${params.slowMA}（死叉）`,
+      } : null,
       latest: {
         price: latest.close,
         maFast: fastMA,
