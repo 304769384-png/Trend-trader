@@ -47,3 +47,6 @@ real_stock_data.pkl
 # 但保留PWA目录下的所有内容
 !pwa/
 !pwa/**
+
+# v41: docs/ = 量化慧采完整包（README/评分说明/回测报告/部署指南 全部保留）
+!docs/**
