@@ -1,165 +1,44 @@
-/**
- * Service Worker - 离线缓存支持 (v8 优化版)
- * 趋势交易助手 PWA
- * 适配 Safari 桌面 + 腾讯云静态托管
+/* Jayce量化慧采 PWA Service Worker
+ * 策略：仅处理同源 GET（静态壳），网络优先、失败回退缓存壳；
+ *       跨域请求（腾讯行情等）一律不拦截，交给浏览器原生处理（含 CORS 校验）。
  */
-
-const CACHE_NAME = 'trend-trader-v21.8';
-// 核心资源预缓存（包含所有图标尺寸）
-const CORE_ASSETS = [
+const CACHE = 'quant-app-v41';
+const SHELL = [
   './',
   './index.html',
-  './css/style.css',
-  './js/strategy.js',
-  './js/data.js',
-  './js/app.js',
-  './js/echarts.min.js',
   './manifest.json',
-  './icons/icon.svg',
-  './icons/favicon.svg',
+  './regime_breadth.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/icon-180.png',
-  './icons/icon-167.png',
-  './icons/icon-152.png',
-  './icons/icon-32.png',
-  './icons/icon-16.png',
-  './icons/icon-192-maskable.png',
-  './icons/icon-512-maskable.png',
+  './icons/icon-512-maskable.png'
 ];
 
-// CDN白名单（Stale-While-Revalidate策略）
-const CDN_HOSTS = ['cdn.jsdelivr.net'];
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
 
-// 安装 - 逐个缓存，单个失败不影响整体
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        // 使用Promise.allSettled容错：单个资源失败不导致SW安装失败
-        return Promise.allSettled(
-          CORE_ASSETS.map(url =>
-            cache.add(url).catch(err => {
-              console.warn('预缓存跳过:', url, err.message);
-            })
-          )
-        );
-      })
-      .then(() => self.skipWaiting())
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
   );
 });
 
-// 激活
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames
-          .filter(name => name !== CACHE_NAME)
-          .map(name => caches.delete(name))
-      );
-    }).then(() => self.clients.claim())
-  );
-});
-
-// fetch 事件处理
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-
-  // CDN资源（ECharts等）: Stale-While-Revalidate，先缓存后网络更新
-  if (CDN_HOSTS.includes(url.hostname)) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(cache => {
-        return cache.match(event.request).then(cached => {
-          const fetchPromise = fetch(event.request, { mode: 'cors' })
-            .then(networkResponse => {
-              if (networkResponse && networkResponse.status === 200) {
-                cache.put(event.request, networkResponse.clone()).catch(() => {});
-              }
-              return networkResponse;
-            })
-            .catch(() => cached || new Response('', { status: 503 }));
-          return cached || fetchPromise;
-        });
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  // 非 GET 或跨域请求：不拦截（跨域由浏览器原生 CORS 处理，避免 SW 把失败回退成 index.html）
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // 静态壳 / 同源代理：网络优先，离线回退缓存
+  e.respondWith(
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone();
+        if (res.ok) {
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
+        return res;
       })
-    );
-    return;
-  }
-
-  // 同源API/数据请求（bundle.json、股票数据）: Network-First，失败回缓存
-  if (url.origin === location.origin && url.pathname.startsWith('/data/')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, clone).catch(() => {});
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(event.request).then(cached => {
-            return cached || new Response('{"error":"offline"}', {
-              status: 503,
-              headers: { 'Content-Type': 'application/json' }
-            });
-          });
-        })
-    );
-    return;
-  }
-
-  // index.html: Network-First，确保每次打开都是最新版本
-  if (url.origin === location.origin && (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('/index.html'))) {
-    event.respondWith(
-      fetch(event.request)
-        .then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, clone).catch(() => {});
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(event.request).then(cached => {
-            return cached || new Response('离线模式', { status: 503 });
-          });
-        })
-    );
-    return;
-  }
-
-  // 其他同源静态资源（JS/CSS/图标等）: Network-First，失败回缓存
-  // 确保每次打开都使用最新代码，避免设置保存失败等缓存导致的问题
-  if (url.origin === location.origin) {
-    event.respondWith(
-      fetch(event.request)
-        .then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, clone).catch(() => {});
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          return caches.match(event.request).then(cached => {
-            return cached || new Response('', { status: 503 });
-          });
-        })
-    );
-    return;
-  }
-
-  // 其他跨域请求（腾讯/新浪API）: 直接走网络，不缓存
-  event.respondWith(
-    fetch(event.request).catch(() => new Response('', { status: 503 }))
+      .catch(() => caches.match(e.request).then((hit) => hit || caches.match('./index.html')))
   );
 });

@@ -1,48 +1,17 @@
 {
-  "name": "趋势交易助手",
-  "short_name": "趋势助手",
-  "description": "双均线趋势策略交易助手，支持实时信号、回测、自定义参数",
-  "id": "./",
-  "start_url": "./",
+  "name": "Jayce量化慧采 v41",
+  "short_name": "Jayce量化慧采",
+  "description": "综合量化工作台：MA10十日线回踩选股(六因子9处桶分校准+S9/R9扣分+T0跌停剔除+回调结构项·无风控乘数·推荐区≥70) + 仓位建议(单只上限12~20% · 联动两盏灯非对称分级降仓) + 弱市提醒(仅提示) + 小盘熊市两盏灯(中证1000距MA20 + 市场宽度14:45盘中预估/收盘定格自动抓取) + ETF动量轮动，附每日SOP与双回测报告",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
-  "orientation": "any",
-  "background_color": "#0A1628",
-  "theme_color": "#0A1628",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
   "lang": "zh-CN",
-  "dir": "ltr",
-  "categories": ["finance", "productivity", "utilities"],
   "icons": [
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-192-maskable.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "icons/icon-512-maskable.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
