@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jayce量化慧采 v5.4 · 腾讯云一键部署指南</title>
+<style>
+  :root{--bg:#0a0a0c;--card:#141418;--line:#26262e;--gold:#d4af37;--gold2:#f0d27a;--tx:#e8e6df;--sub:#9a978c;--ok:#3fbf6f;--warn:#e0a33a;--err:#e05555}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;padding:28px 16px 60px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:22px;letter-spacing:.5px;border-left:4px solid var(--gold);padding-left:12px;margin-bottom:6px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:22px}
+  h2{font-size:16px;color:var(--gold);margin:30px 0 10px;display:flex;align-items:center;gap:8px}
+  h2 .n{background:var(--gold);color:#0a0a0c;border-radius:6px;font-size:12px;font-weight:700;padding:1px 7px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+  .card b{color:var(--gold2)}
+  ol,ul{margin-left:20px}
+  li{margin:5px 0;font-size:14px}
+  code{background:#1c1c22;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12.5px;color:#7fd0ff;word-break:break-all}
+  .tag{display:inline-block;border-radius:5px;padding:0 8px;font-size:12px;font-weight:600;margin-right:6px}
+  .tag.a{background:#1d2b1d;color:var(--ok);border:1px solid var(--ok)}
+  .tag.b{background:#2b2413;color:var(--warn);border:1px solid var(--warn)}
+  .tag.c{background:#2b1616;color:var(--err);border:1px solid var(--err)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)}
+  .note{font-size:12.5px;color:var(--sub);border-left:3px solid var(--line);padding-left:10px;margin:8px 0}
+  .check li{list-style:none;position:relative;padding-left:26px}
+  .check li::before{content:"☐";position:absolute;left:0;color:var(--gold)}
+  .foot{margin-top:34px;color:var(--sub);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Jayce量化慧采 v5.4 · 腾讯云一键部署指南</h1>
+  <div class="sub">纯静态 PWA · 零构建 · 零后端 · 包内含设计说明与双回测报告（reports/ 两件套）+ 每日 SOP 与市场宽度历史种子 + 两盏灯非对称分级降仓</div>
+
+  <h2><span class="n">包</span>压缩包内容</h2>
+  <div class="card">
+    解压后 <code>index.html</code> 为应用入口（全部界面/逻辑单文件），其余文件按相对路径引用，<b>必须整体上传、保持目录结构</b>：
+    <ul>
+      <li><code>index.html</code> 应用本体 · <code>sw.js</code> 离线缓存（缓存键 <code>quant-app-v41</code>）· <code>manifest.json</code> PWA 清单</li>
+      <li><code>regime_breadth.json</code> <b>市场宽度历史种子（近 60 交易日）</b>——灯2 必需，清缓存/换机后立即补齐 20 日序列，<b>勿删</b></li>
+      <li><code>reports/bucket-calib.html</code> 桶分校准设计说明（9 处校准审计依据）</li>
+      <li><code>reports/桶分校准与双回测.html</code> 全时段/近3年双口径对比回测报告</li>
+      <li><code>icons/</code> 桌面图标（180/192/512/maskable）· <code>docs/</code> 本部署指南 · <code>README.md</code> · <code>评分说明.md</code></li>
+    </ul>
+  </div>
+
+  <h2><span class="n">A</span>EdgeOne Pages（Makers Drop）<span class="tag a">推荐 · 拖 ZIP 即部署</span></h2>
+  <div class="card">
+    <ol>
+      <li>浏览器打开 <code>https://pages.edgeone.ai/zh/drop</code></li>
+      <li>把 <code>quant-app-v5.4-deploy.zip</code> <b>直接拖进上传区</b>（或点上传按钮选择；支持文件夹/ZIP，单文件 ≤25MB，文件数 ≤1000）</li>
+      <li>设置域名：可留空用默认免费域名，或输入喜欢的名字</li>
+      <li>点「立即部署」，获得 <b>https</b> 链接（EdgeOne 自动签发免费 SSL 证书）</li>
+      <li>中国境内用户需注册/登录腾讯云账号，登录后在仪表板才能拿到<b>永久有效</b>访问链接（未登录的临时链接仅 1 小时有效）</li>
+      <li>手机 Safari 打开该链接 → 分享 → 「添加到主屏幕」，即可像原生 App 一样全屏使用</li>
+    </ol>
+    <div class="note">后续更新：登录仪表板 → 找到项目 → 上传新版 ZIP 即覆盖更新；手机端打开页面后点左上角 <code>↻v41</code> 徽标强制刷新（清缓存并注销旧 Service Worker）。</div>
+  </div>
+
+  <h2><span class="n">B</span>腾讯云 CloudBase 静态网站托管<span class="tag b">控制台上传 / CLI 皆可</span></h2>
+  <div class="card">
+    <ol>
+      <li>腾讯云控制台搜索「云开发 CloudBase」→ 开通环境</li>
+      <li>进入「静态网站托管」→「本地项目部署」→ 选择<b>解压后的全部文件</b>上传（上传到根目录，保持 reports/、icons/ 结构）</li>
+      <li>获得 <code>https://环境ID.tcloudbaseapp.com</code> 链接（默认 HTTPS），Safari 添加到主屏幕</li>
+    </ol>
+    <div class="note">可选 CLI 一键部署：<code>npm i -g @cloudbase/cli</code> → <code>cloudbase login</code> → 在解压目录执行 <code>cloudbase framework deploy</code>。</div>
+  </div>
+
+  <h2><span class="n">C</span>腾讯云 COS 静态网站托管<span class="tag c">需手动开 HTTPS · 域名需备案</span></h2>
+  <div class="card">
+    <ol>
+      <li>创建存储桶 → 基础配置开启「静态网站」功能，索引文档填 <code>index.html</code></li>
+      <li>上传解压后的全部文件到桶根目录</li>
+      <li>绑定 CDN 加速域名并开启 <b>HTTPS</b>（PWA 必须 HTTPS，Service Worker 才生效）</li>
+      <li>自定义域名在<b>中国大陆</b>访问需完成 ICP 备案</li>
+    </ol>
+  </div>
+
+  <h2><span class="n">D</span>每日 SOP · 市场宽度（收盘定格）</h2>
+  <div class="card">
+    <p style="font-size:14px;margin-bottom:8px">灯2 用的<b>市场宽度 = 上涨家数占比</b>，<b>盘中随时在变</b>，必须用「收盘定格值」才能与回测同口径。因此 App <b>只在收盘后或次日凌晨打开时</b>才抓取并写入当日宽度，<b>盘中一律不写</b>。</p>
+    <ul>
+      <li><b>15:25–24:00（盘后）</b>：手机打开一次 App 停在首页即可 —— 约 1.5 秒后自动后台抓取当日收盘宽度（无需点击）。</li>
+      <li><b>00:00–08:30（次日凌晨）</b>：补录 —— 按「上一交易日」写入（当天没来得及打开时用）。</li>
+      <li><b>09:30–15:00（盘中）</b>：不抓、不写；灯2 继续用历史序列算 20 日均值。</li>
+      <li>周末 / 节假日：指数未更新 → 自动跳过。</li>
+    </ul>
+    <div class="note"><b>每日 3 步</b>：① 收盘后开一次 App → ② 点「开始评分」→ ③ 需要留档就「导出 CSV」。无需再手工上传 <code>regime_breadth.json</code>（它只是历史种子）。</div>
+  </div>
+
+  <h2><span class="n">✓</span>部署后自检清单</h2>
+  <div class="card check">
+    <ul>
+      <li>浏览器打开为黑金界面，左上角版本徽标为 <b>v41</b></li>
+      <li>「评分规则」页需输入密码（<code>jayce1024</code>）解锁；底部可打开 <code>reports/</code> 两份报告，并可见《每日 SOP · 市场宽度》《灯1/灯2 定义与非对称分级降仓》《导出 CSV 说明》等节</li>
+      <li>点「开始评分」能拉取行情并出分；「导出 CSV」正常（首次会弹一次导出说明）</li>
+      <li>评分结果含「小盘熊市两盏灯」行（灯1 中证1000 / 灯2 市场宽度），宽度取自<b>收盘定格</b>（收盘前则为「盘中14:45预估值」），并标注<b>样本 N/20 日 + 最新日期</b>；正常应显示最新交易日（如 <code>2026-09-30</code>），若显示很早的日期即为种子/抓取异常</li>
+      <li><b>周末/节假日也能更新（v39 修复）</b>：宽度标签统一取「指数最新交易日」，休市日打开会补记最近一个已收盘交易日；旧版在非交易日不会更新</li>
+      <li><b>两个抓取时点（v40）</b>：14:45–15:00 抓「盘中预估」（收盘前即可看到灯、来得及操作），15:25 后抓「收盘定格」并覆盖预估值；界面会标注该条是「盘中14:45预估值」还是「收盘定格」</li>
+      <li><b>仓位建议卡随灯控联动</b>：两灯全亮或宽度深弱（&lt;42%）时单只/总仓显示 0%（空仓）、宽度偏弱（42–44%）显示半仓，并附「灯控×N（未降仓 X%）」对照</li>
+      <li>Safari 添加到主屏幕后，断网仍能打开应用壳（Service Worker 生效）</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">?</span>常见问题</h2>
+  <div class="card">
+    <ul>
+      <li><b class="warn">部署后还是旧界面？</b>点左上角 <code>↻v41</code> 徽标强制刷新，会清理旧缓存并注销旧 SW。</li>
+      <li><b class="warn">市场宽度（灯2）什么时候更新？</b>两个时点：<b>14:45–15:00</b> 抓「盘中预估」（收盘前就能看到灯、来得及操作），<b>15:25 之后</b>再抓「收盘定格」并覆盖预估值；<b>09:30–14:45 不写</b>（早段噪声大）。建议 14:45 看一次、收盘后再打开一次。</li>
+      <li><b class="warn">清缓存后宽度是否要从头累积？</b>不会。包内 <code>regime_breadth.json</code> 提供近 60 交易日种子，启动即补齐 20 日序列。</li>
+      <li><b class="warn">自定义域名打不开 / 报 404？</b>确认域名已完成 ICP 备案并正确解析到托管/CDN。</li>
+      <li><b class="warn">行情数据拉不到？</b>行情走腾讯公网接口 <code>web.ifzq.gtimg.cn</code>，宽度走新浪 <code>vip.stock.finance.sina.com.cn</code>，均需联网获取，与托管平台无关；SW 策略已配置为这些域名永不缓存。</li>
+      <li><b class="warn">报告页打不开？</b>确认 reports/ 目录已随包上传且文件名未被改动（中文文件名保持原样）。</li>
+    </ul>
+  </div>
+
+  <div class="foot">Jayce量化慧采 v5.4（对外版本 v41）· 2026-10-09 · 本工具仅用于技术研究与个人学习，不构成投资建议</div>
+</div>
+</body>
+</html>

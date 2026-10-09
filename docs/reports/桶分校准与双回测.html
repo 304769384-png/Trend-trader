@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>评分优化与双回测 · 全时段+近3年</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#161a22; --panel2:#1c2130; --line:#2a3142;
+    --gold:#d4af37; --gold2:#f0d98c; --red:#e05252; --green:#3ecf8e;
+    --blue:#5aa9ff; --text:#e8eaf0; --sub:#9aa3b5; --dim:#6b7385;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:"Noto Sans CJK SC","WenQuanYi Micro Hei","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.8;padding:36px 20px 90px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:27px;letter-spacing:1px;color:var(--gold2)}
+  .sub{color:var(--sub);font-size:13px;margin-top:6px}
+  .hero{background:linear-gradient(135deg,#1a1f2b 0%,#10131b 100%);border:1px solid var(--line);border-radius:14px;padding:28px 30px;margin-bottom:28px;position:relative;overflow:hidden}
+  .hero::after{content:"";position:absolute;top:-60px;right:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(212,175,55,.12),transparent 70%)}
+  .verdict{display:flex;gap:14px;flex-wrap:wrap;margin-top:22px}
+  .vcard{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .vcard .n{font-size:15px;font-weight:700;color:var(--gold2)}
+  .vcard .l{font-size:12px;color:var(--sub);margin-top:3px}
+  .vcard .s{font-size:12px;margin-top:6px;padding:3px 8px;border-radius:5px;display:inline-block}
+  .vcard .s.yes{background:rgba(62,207,142,.14);color:var(--green)}
+  .vcard .s.no{background:rgba(224,82,82,.14);color:var(--red)}
+  .vcard .s.warn{background:rgba(240,217,140,.14);color:var(--gold2)}
+  h2{font-size:19px;color:var(--gold);margin:38px 0 14px;padding-left:12px;border-left:4px solid var(--gold)}
+  h3{font-size:15px;color:var(--text);margin:22px 0 10px}
+  p{color:var(--text);font-size:14px;margin-bottom:10px}
+  .muted{color:var(--sub)} .dim{color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin:12px 0 6px}
+  th{background:var(--panel2);color:var(--gold2);font-weight:600;padding:7px 8px;text-align:center;border:1px solid var(--line);white-space:nowrap}
+  td{padding:6px 8px;text-align:center;border:1px solid var(--line);color:var(--text);white-space:nowrap}
+  tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+  td.l,th.l{text-align:left}
+  .up{color:var(--red)} .down{color:var(--green)}
+  .best{background:rgba(212,175,55,.12);color:var(--gold2);font-weight:700}
+  .good{color:var(--green);font-weight:600}
+  .bad{color:var(--red);font-weight:600}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:14px 0}
+  .hl{background:rgba(212,175,55,.08);border-left:3px solid var(--gold);padding:10px 14px;border-radius:6px;margin:12px 0}
+  .hl.red{background:rgba(224,82,82,.07);border-left-color:var(--red)}
+  .hl.green{background:rgba(62,207,142,.07);border-left-color:var(--green)}
+  .num{font-variant-numeric:tabular-nums}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .warn{background:rgba(240,217,140,.08);border:1px solid rgba(240,217,140,.25);border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px}
+  .fac{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 10px;font-size:13px;color:var(--gold2);margin-bottom:8px}
+  .diag{font-size:13px;padding:8px 12px;border-radius:6px;margin:8px 0}
+  .diag.ok{background:rgba(62,207,142,.08);border-left:3px solid var(--green)}
+  .diag.warn{background:rgba(240,217,140,.08);border-left:3px solid var(--gold2)}
+  .diag.bad{background:rgba(224,82,82,.08);border-left:3px solid var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <h1>评分优化与双回测 · 全时段 + 近3年</h1>
+  <div class="sub">全时段候选 156,975（2000-2026，5864交易日）｜ 近3年候选 35,433（2023-2026）｜ 三策略对比：官方七因子基准 / 初版六因子 / 重设计方案</div>
+  <div class="verdict">
+    <div class="vcard">
+      <div class="n">初版六因子 稳健最优</div>
+      <div class="l">全时段+近3年、所有年代一致占优</div>
+      <div class="s yes">推荐</div>
+    </div>
+    <div class="vcard">
+      <div class="n">重设计方案 过拟合</div>
+      <div class="l">近3年极优，但2000-2022严重恶化</div>
+      <div class="s no">不推荐</div>
+    </div>
+    <div class="vcard">
+      <div class="n">关键教训</div>
+      <div class="l">3年分桶发现的"评分倒挂"多为近期行情特有</div>
+      <div class="s warn">全时段验证</div>
+    </div>
+  </div>
+</div>
+
+<h2>一、重设计方案</h2>
+<p class="muted">基于近3年分桶分析发现的4处"评分倒挂"，对 S3/S4/S6/S8 重新设计评分函数；S1/S5 方向正确仅按初版六因子权重等比缩放。权重沿用初版六因子（去S2摊回）。</p>
+<table>
+  <tr><th>因子</th><th>官方权重</th><th>初版权重</th><th>重设计方案主要改动</th></tr>
+  <tr><td>S1 回踩幅度</td><td>14.5</td><td>17.2</td><td class="muted">缩放</td></tr>
+  <tr><td>S2 量比</td><td>15.5</td><td>0</td><td class="bad">移除</td></tr>
+  <tr><td>S3 回踩天数</td><td>20.0</td><td>23.7</td><td class="bad">2天13.6→1.0；5/6/7天降；16天升</td></tr>
+  <tr><td>S4 均线斜率</td><td>9.6</td><td>11.4</td><td class="bad">≤0斜率5.6→11.4满分</td></tr>
+  <tr><td>S5 涨停次数</td><td>11.6</td><td>13.7</td><td class="muted">缩放</td></tr>
+  <tr><td>S6 涨停放量比</td><td>18.6</td><td>22.0</td><td class="bad">&lt;1.0量比6.5→1.5；≥6.0升</td></tr>
+  <tr><td>S8 gap</td><td>10.3</td><td>12.2</td><td class="bad">0.09~0.10 gap 2.1→12.2满分；0.02~0.04降</td></tr>
+</table>
+
+<h2>二、近3年回测（2023-2026，样本外513天）</h2>
+<table>
+  <tr><th>指标</th><th>官方基准</th><th>初版六因子</th><th>重设计方案</th></tr>
+  <tr><td>预测力 IC</td><td class="num">+0.058</td><td class="num">+0.071</td><td class="num best">+0.107</td></tr>
+  <tr><td>每天前8名</td><td class="num">+0.070%</td><td class="num">+0.076%</td><td class="num best">+0.112%</td></tr>
+  <tr><td>≥70分候选</td><td class="num">+0.553%</td><td class="num">+0.840%</td><td class="num best">+1.451%</td></tr>
+  <tr><td>≥80分候选</td><td class="num">+1.319%</td><td class="num">+1.485%</td><td class="num best">+2.001%</td></tr>
+  <tr><td>≥85分候选</td><td class="num">+1.592%</td><td class="num">+1.669%</td><td class="num best">+1.969%</td></tr>
+</table>
+<div class="hl green"><b>只看近3年，重设计方案 全面碾压：</b>IC 0.058→0.107，Top8 +0.070%→+0.112%，≥80分档 +1.319%→+2.001%。如果只做近3年回测，会得出"重设计方案大幅优化成功"的结论。</div>
+
+<h2>三、全时段回测（2000-2026，样本外5664天）</h2>
+<table>
+  <tr><th>指标</th><th>官方基准</th><th>初版六因子</th><th>重设计方案</th></tr>
+  <tr><td>预测力 IC</td><td class="num">+0.038</td><td class="num best">+0.043</td><td class="num bad">+0.032</td></tr>
+  <tr><td>每天前8名</td><td class="num">+0.075%</td><td class="num best">+0.079%</td><td class="num bad">+0.058%</td></tr>
+  <tr><td>≥70分候选</td><td class="num">+0.279%</td><td class="num">+0.376%</td><td class="num best">+0.551%</td></tr>
+  <tr><td>≥80分候选</td><td class="num">+0.539%</td><td class="num">+0.631%</td><td class="num best">+1.176%</td></tr>
+  <tr><td>≥85分候选</td><td class="num">+0.891%</td><td class="num">+0.969%</td><td class="num best">+1.458%</td></tr>
+</table>
+<div class="hl red"><b>全时段暴露真相：</b>重设计方案 的 IC（0.032）和 Top8（+0.058%）反而<b>低于官方基准</b>，只有高分档（≥70/80/85）更好。初版六因子 则在全时段<b>所有指标</b>都优于官方基准。</div>
+
+<h2>四、年代分段诊断：重设计方案过拟合的铁证</h2>
+<p class="muted">按年代分段看三策略的预测力 IC（全样本），重设计方案 只在 2023-2026 领先，此前三个年代全部大幅落后。</p>
+<table>
+  <tr><th>年代</th><th>官方基准 IC</th><th>初版六因子 IC</th><th>重设计方案 IC</th><th>结论</th></tr>
+  <tr><td>2000-2007</td><td class="num">+0.049</td><td class="num">+0.050</td><td class="num bad">+0.002</td><td class="bad">严重恶化</td></tr>
+  <tr><td>2008-2015</td><td class="num">+0.028</td><td class="num">+0.031</td><td class="num bad">-0.003</td><td class="bad">严重恶化</td></tr>
+  <tr><td>2016-2022</td><td class="num">+0.041</td><td class="num">+0.043</td><td class="num bad">+0.026</td><td class="bad">明显变差</td></tr>
+  <tr class="best"><td>2023-2026</td><td class="num">+0.044</td><td class="num">+0.053</td><td class="num">+0.084</td><td class="good">大幅领先</td></tr>
+</table>
+<div class="hl red">
+  <b>重设计方案 是"近期行情特化"模型：</b>它在 2023-2026 大幅领先（IC 0.044→0.084），但在 2000-2007（0.049→0.002）和 2008-2015（0.028→-0.003）几乎失效。<b>这正是教科书式的过拟合</b>——评分函数在近3年数据上被重新设计，只对近3年有效。
+</div>
+<div class="hl green">
+  <b>初版六因子 在所有年代一致占优：</b>2000-2007（0.049→0.050）、2008-2015（0.028→0.031）、2016-2022（0.041→0.043）、2023-2026（0.044→0.053）。去掉 S2 是真正的稳健优化，不依赖特定行情。
+</div>
+
+<h2>五、为什么"评分倒挂"不成立：全时段因子分桶</h2>
+<p class="muted">近3年分桶发现的4处倒挂，在全时段（2000-2026）分桶中大多不成立——它们是近期行情特有的，不是稳定规律。</p>
+
+<h3><span class="fac">S3 回踩天数：2天回踩</span></h3>
+<table>
+  <tr><th>时段</th><th>2天回踩收益</th><th>样本数</th><th>结论</th></tr>
+  <tr><td>近3年</td><td class="down">-0.142%</td><td>2857</td><td class="bad">看似应降分</td></tr>
+  <tr><td>全时段</td><td class="up">+0.175%</td><td>11487</td><td class="good">实际是正收益</td></tr>
+</table>
+<p class="muted">重设计方案 把 2天回踩从 13.6 分降到 1.0 分，但全时段 2天回踩是 +0.175% 正收益，降分是错的。</p>
+
+<h3><span class="fac">S4 均线斜率：斜率≤0</span></h3>
+<table>
+  <tr><th>时段</th><th>斜率≤0 收益</th><th>样本数</th><th>结论</th></tr>
+  <tr><td>近3年</td><td class="up">+0.599%</td><td>1432</td><td class="bad">看似应给满分</td></tr>
+  <tr><td>全时段</td><td class="up">+0.054%</td><td>5253</td><td class="good">仅略正，非最优</td></tr>
+</table>
+<p class="muted">重设计方案 把斜率≤0 提到满分 11.4，但全时段它只是 +0.054%，而 &gt;0.07 斜率才是最优（+0.122%，官方基准已给 9.6 分）。</p>
+
+<h3><span class="fac">S6 涨停放量比：&lt;1.0 与 ≥6.0</span></h3>
+<table>
+  <tr><th>时段</th><th>&lt;1.0 收益</th><th>≥6.0 收益</th><th>结论</th></tr>
+  <tr><td>近3年</td><td class="down">-0.133%</td><td class="up">+0.234%</td><td class="bad">看似应降&lt;1.0、升≥6.0</td></tr>
+  <tr><td>全时段</td><td class="up">+0.029%</td><td class="up">+0.013%</td><td class="good">两者都平庸</td></tr>
+</table>
+<p class="muted">重设计方案 把 &lt;1.0 从 6.5 降到 1.5、把 ≥6.0 从 3.6 升到 9.0，但全时段两者收益都接近零，改动缺乏依据。</p>
+
+<h3><span class="fac">S8 gap：0.09~0.10 与 0.02~0.03</span></h3>
+<table>
+  <tr><th>时段</th><th>0.09~0.10 收益</th><th>0.02~0.03 收益</th><th>结论</th></tr>
+  <tr><td>近3年</td><td class="up">+0.520%</td><td class="up">+0.046%</td><td class="bad">看似应升0.09~0.10、降0.02~0.03</td></tr>
+  <tr><td>全时段</td><td class="up">+0.020%</td><td class="up">+0.074%</td><td class="good">0.09~0.10 平庸，0.02~0.03 反而更好</td></tr>
+</table>
+<p class="muted">重设计方案 把 0.09~0.10 gap 提到满分 12.2，但全时段它只有 +0.020%（平庸），而 0.02~0.03 是 +0.074%（更好）。这是最典型的过拟合改动。</p>
+
+<div class="hl red">
+  <b>核心教训：</b>近3年分桶发现的4处"评分倒挂"，在全时段分桶中全部不成立。它们不是稳定的因子规律，而是 2023-2026 特定行情的产物。官方基准 的评分函数其实已经按长期规律校准（3天回踩满分、&gt;0.07斜率高分、5.5~6.0放量满分），全时段验证下方向基本正确。
+</div>
+
+<h2>六、结论与建议</h2>
+<div class="hl green">
+  <b>推荐初版六因子作为最终优化策略：</b>去掉被证实无用的 S2 量比因子，其余六因子权重按比例摊回。它在全时段和近3年、以及所有四个年代分段中一致占优，是稳健的、不依赖特定行情的优化。
+</div>
+<div class="hl red">
+  <b>不推荐重设计方案：</b>虽然它在近3年表现惊艳（IC 0.107、Top8 +0.112%），但这是对近3年数据的过拟合。一旦放到 2000-2022 的历史数据上，预测力几乎失效。若未来市场延续当前风格，重设计方案 可能继续有效，但这是对行情风格的押注，不是稳健优化。
+</div>
+<div class="warn">
+  <b>方法论收获：</b>这次双回测（全时段 + 近3年）完整展示了"为什么必须做全时段验证"。如果只做近3年回测，我们会错误地采纳重设计方案。全时段回测 + 年代分段诊断，是识别过拟合的照妖镜。初版六因子 的改进之所以稳健，是因为"S2 无用"这一结论在全时段和近3年都成立。
+</div>
+
+<div class="foot">
+  数据：8/7 adj 全市场 5538 只 ｜ 全时段候选 156,975 / 5864交易日 ｜ 近3年候选 35,433 / 713交易日 ｜ 脚本：回测脚本（已归档） ｜ 生成：2026-09-02
+</div>
+
+</div>
+</body>
+</html>
